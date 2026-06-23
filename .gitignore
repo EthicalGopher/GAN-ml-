@@ -2,6 +2,9 @@
 debug*
 datasets/
 checkpoints/
+Guwahati_Azara_dataset/
+logs/
+results/
 results/
 build/
 dist/
