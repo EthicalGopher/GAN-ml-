@@ -130,8 +130,8 @@ class Pix2PixGUI(ctk.CTk):
         super().__init__()
 
         self.title("Pix2Pix Control Center")
-        self.geometry("1180x780")
-        self.resizable(False, False)
+        self.geometry("1180x920")
+        self.resizable(True, True)
         self.configure(fg_color="#fcfdfe")
         
         # Log streaming state
@@ -152,6 +152,8 @@ class Pix2PixGUI(ctk.CTk):
         self.finetune_page = FinetunePage(self.container, self)
         self.runs_page = RunsPage(self.container, self)
         self.checkpoints_page = CheckpointsPage(self.container, self)
+        self.preprocess_page = PreprocessPage(self.container, self)
+        self.test_model_page = TestModelPage(self.container, self)
         
         # Show home page initially
         self.show_page("home")
@@ -166,6 +168,8 @@ class Pix2PixGUI(ctk.CTk):
         self.finetune_page.pack_forget()
         self.runs_page.pack_forget()
         self.checkpoints_page.pack_forget()
+        self.preprocess_page.pack_forget()
+        self.test_model_page.pack_forget()
         
         if page_name == "home":
             self.home_page.pack(fill="both", expand=True)
@@ -182,6 +186,12 @@ class Pix2PixGUI(ctk.CTk):
         elif page_name == "checkpoints":
             self.checkpoints_page.pack(fill="both", expand=True, padx=30, pady=30)
             self.checkpoints_page.on_show()
+        elif page_name == "preprocess":
+            self.preprocess_page.pack(fill="both", expand=True, padx=30, pady=30)
+            self.preprocess_page.on_show()
+        elif page_name == "test_model":
+            self.test_model_page.pack(fill="both", expand=True, padx=30, pady=30)
+            self.test_model_page.on_show()
 
 
 
@@ -391,6 +401,18 @@ class Pix2PixGUI(ctk.CTk):
                     os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
             except Exception:
                 pass
+        try:
+            if hasattr(self, "preprocess_page") and self.preprocess_page.process:
+                if self.preprocess_page.process.poll() is None:
+                    import signal
+                    os.killpg(os.getpgid(self.preprocess_page.process.pid), signal.SIGTERM)
+        except Exception:
+            pass
+        try:
+            if hasattr(self, "test_model_page") and hasattr(self.test_model_page, "netG"):
+                self.test_model_page.netG = None
+        except Exception:
+            pass
         self.destroy()
         sys.exit(0)
 
@@ -465,6 +487,9 @@ class TrainSettingsModal(ctk.CTkToplevel):
             text="Save Settings", 
             font=FONT_BUTTON, 
             height=36,
+            fg_color="#1a73e8",
+            text_color="#ffffff",
+            hover_color="#155cb4",
             command=self.save_settings
         )
         save_btn.pack(fill="x", padx=25, pady=(15, 5))
@@ -565,6 +590,7 @@ class FineSettingsModal(ctk.CTkToplevel):
             font=FONT_BUTTON, 
             height=36,
             fg_color="#0f9d58",
+            text_color="#ffffff",
             hover_color="#0b7a44",
             command=self.save_settings
         )
@@ -659,18 +685,23 @@ class HomePage(ctk.CTkFrame):
         self.grid_frame.grid_columnconfigure(1, weight=1)
         self.grid_frame.grid_rowconfigure(0, weight=1)
         self.grid_frame.grid_rowconfigure(1, weight=1)
+        self.grid_frame.grid_rowconfigure(2, weight=1)
         
         # Load asset files
         self.img_train = self.load_card_image("train.jpg")
         self.img_fine = self.load_card_image("finetune.jpg")
         self.img_runs = self.load_card_image("runs.jpg")
         self.img_checkpoints = self.load_card_image("checkpoints.jpg")
+        self.img_preprocess = self.load_card_image("preprocess.jpg")
+        self.img_test = self.load_card_image("test.jpg")
         
         # Create Cards
         self.create_card(0, 0, "Train New Model", "Configure variables and start a new generative model training task.", self.img_train, lambda: self.controller.show_page("train"), "#1a73e8", "#e8f0fe")
         self.create_card(0, 1, "Fine-tune Checkpoint", "Choose a pre-trained epoch checkpoint and configure parameters to resume.", self.img_fine, lambda: self.controller.show_page("finetune"), "#0f9d58", "#e6f4ea")
         self.create_card(1, 0, "Monitoring & Real-time Logs", "Watch terminal standard output stream and monitor loss statistics live.", self.img_runs, lambda: self.controller.show_page("runs"), "#8b5cf6", "#f5f3ff")
         self.create_card(1, 1, "Model Storage Explorer", "Browse checkpoints folder, review weight files, and clean up workspace storage.", self.img_checkpoints, lambda: self.controller.show_page("checkpoints"), "#f97316", "#fff7ed")
+        self.create_card(2, 0, "Dataset Preprocessing", "Select raw Landsat satellite scenes and preprocess/tile them for training.", self.img_preprocess, lambda: self.controller.show_page("preprocess"), "#0284c7", "#f0f9ff")
+        self.create_card(2, 1, "Interactive Model Tester", "Load checkpoints, select test images, and run immediate interactive inference.", self.img_test, lambda: self.controller.show_page("test_model"), "#0d9488", "#f0fdfa")
 
     def load_card_image(self, name: str) -> ctk.CTkImage:
         path = Path(__file__).parent / "assets" / name
@@ -682,9 +713,9 @@ class HomePage(ctk.CTkFrame):
                 print(f"Failed loading card image {name}: {e}")
         return None
 
-    def create_card(self, row: int, col: int, title: str, desc: str, ctk_img: ctk.CTkImage, command, accent_color: str, hover_bg: str):
+    def create_card(self, row: int, col: int, title: str, desc: str, ctk_img: ctk.CTkImage, command, accent_color: str, hover_bg: str, columnspan: int = 1):
         card = ctk.CTkFrame(self.grid_frame, fg_color="#ffffff", corner_radius=16, border_width=1.5, border_color="#e2e8f0")
-        card.grid(row=row, column=col, padx=15, pady=15, sticky="nsew")
+        card.grid(row=row, column=col, columnspan=columnspan, padx=15, pady=15, sticky="nsew")
         
         def on_enter(e):
             card.configure(border_color=accent_color, fg_color=hover_bg)
@@ -712,7 +743,7 @@ class HomePage(ctk.CTkFrame):
         lbl_title = ctk.CTkLabel(left_p, text=title, font=FONT_CARD_TITLE, text_color="#0f172a")
         lbl_title.pack(anchor="w")
         
-        lbl_desc = ctk.CTkLabel(left_p, text=desc, font=FONT_CARD_DESC, text_color="#64748b", wraplength=230, justify="left")
+        lbl_desc = ctk.CTkLabel(left_p, text=desc, font=FONT_CARD_DESC, text_color="#64748b", wraplength=500 if columnspan > 1 else 230, justify="left")
         lbl_desc.pack(anchor="w", pady=(8, 15))
         
         btn = ctk.CTkButton(
@@ -724,6 +755,7 @@ class HomePage(ctk.CTkFrame):
             corner_radius=17, 
             fg_color=accent_color,
             hover_color=accent_color,
+            text_color="#ffffff",
             command=command
         )
         btn.pack(anchor="w")
@@ -892,6 +924,7 @@ class TrainPage(ctk.CTkFrame):
             corner_radius=23, 
             fg_color="#1a73e8", 
             hover_color="#155cb4",
+            text_color="#ffffff",
             command=self.start_training
         )
         self.start_btn.pack(fill="x", pady=(20, 0))
@@ -1180,6 +1213,7 @@ class FinetunePage(ctk.CTkFrame):
             corner_radius=23, 
             fg_color="#0f9d58", 
             hover_color="#0b7a44", 
+            text_color="#ffffff",
             command=self.start_finetuning
         )
         self.submit_btn.pack(fill="x", pady=(20, 0))
@@ -1219,7 +1253,10 @@ class FinetunePage(ctk.CTkFrame):
         if self.fine_epoch.isdigit():
             self.fine_start_count = str(int(self.fine_epoch) + 1)
         else:
-            self.fine_start_count = "51"
+            if num_epochs:
+                self.fine_start_count = str(max(num_epochs) + 1)
+            else:
+                self.fine_start_count = "51"
 
     def load_dataset_sample(self):
         try:
@@ -1322,6 +1359,7 @@ class FinetunePage(ctk.CTkFrame):
             messagebox.showerror("Error", f"Checkpoint folder for '{self.model_dropdown.get()}' not found under ./checkpoints/. Train a model first.")
             return
 
+        start_count = int(self.fine_start_count)
         payload = {
             "name": self.model_dropdown.get(),
             "dataroot": self.fine_dataroot,
@@ -1331,10 +1369,10 @@ class FinetunePage(ctk.CTkFrame):
             "dataset_mode": "aligned",
             "norm": "batch",
             "batch_size": int(self.fine_batch),
-            "n_epochs": int(self.fine_epochs),
+            "n_epochs": (start_count - 1) + int(self.fine_epochs),
             "n_epochs_decay": int(self.fine_epochs_decay),
             "parent_epoch": self.fine_epoch,
-            "epoch_count": int(self.fine_start_count),
+            "epoch_count": start_count,
             "is_finetuning": 1,
             "status": "pending"
         }
@@ -1410,6 +1448,7 @@ class RunsPage(ctk.CTkFrame):
         grid_panel.pack(fill="both", expand=True)
         grid_panel.grid_columnconfigure(0, weight=1)
         grid_panel.grid_columnconfigure(1, weight=2)
+        grid_panel.grid_columnconfigure(2, weight=2)
         grid_panel.grid_rowconfigure(0, weight=1)
 
         # Left: list of runs
@@ -1480,12 +1519,46 @@ class RunsPage(ctk.CTkFrame):
             hover_color="#dc2626", 
             corner_radius=8,
             state="disabled", 
+            text_color="#ffffff",
             command=self.stop_active_run
         )
         self.stop_btn.pack(side="right", padx=10)
         
         self.ws_lbl = ctk.CTkLabel(self.log_controls, text="Status: Idle", text_color="grey")
         self.ws_lbl.pack(side="left", padx=10)
+        
+        # Col 2: Epoch Visual Preview (Vertical Stack)
+        image_preview_panel = ctk.CTkFrame(grid_panel, fg_color="#ffffff", corner_radius=16, border_width=1, border_color="#e2e8f0")
+        image_preview_panel.grid(row=0, column=2, padx=10, sticky="nsew")
+        
+        ctk.CTkLabel(image_preview_panel, text="Epoch Visual Preview", font=(FONT_FAMILY, 14, "bold"), text_color="#0f172a").pack(pady=(15, 2))
+        
+        self.preview_epoch_lbl = ctk.CTkLabel(image_preview_panel, text="No active epoch visuals loaded", font=(FONT_FAMILY, 11), text_color="#64748b")
+        self.preview_epoch_lbl.pack(pady=(0, 10))
+        
+        # 1. Input Image Section
+        ctk.CTkLabel(image_preview_panel, text="INPUT IMAGE (real_A)", font=(FONT_FAMILY, 10, "bold"), text_color="#334155").pack(pady=(5, 2))
+        self.img_input_frame = ctk.CTkFrame(image_preview_panel, width=220, height=220, corner_radius=8, fg_color="#f8fafc", border_width=1, border_color="#cbd5e1")
+        self.img_input_frame.pack(pady=(0, 10))
+        self.img_input_frame.pack_propagate(False)
+        self.lbl_input_img = ctk.CTkLabel(self.img_input_frame, text="Waiting...", font=(FONT_FAMILY, 10), text_color="#64748b")
+        self.lbl_input_img.pack(fill="both", expand=True)
+        
+        # 2. Expected Image Section
+        ctk.CTkLabel(image_preview_panel, text="EXPECTED IMAGE (real_B)", font=(FONT_FAMILY, 10, "bold"), text_color="#334155").pack(pady=(5, 2))
+        self.img_target_frame = ctk.CTkFrame(image_preview_panel, width=220, height=220, corner_radius=8, fg_color="#f8fafc", border_width=1, border_color="#cbd5e1")
+        self.img_target_frame.pack(pady=(0, 10))
+        self.img_target_frame.pack_propagate(False)
+        self.lbl_target_img = ctk.CTkLabel(self.img_target_frame, text="Waiting...", font=(FONT_FAMILY, 10), text_color="#64748b")
+        self.lbl_target_img.pack(fill="both", expand=True)
+        
+        # 3. Model Prediction Section
+        ctk.CTkLabel(image_preview_panel, text="MODEL PREDICTION (fake_B)", font=(FONT_FAMILY, 10, "bold"), text_color="#334155").pack(pady=(5, 2))
+        self.img_pred_frame = ctk.CTkFrame(image_preview_panel, width=220, height=220, corner_radius=8, fg_color="#f8fafc", border_width=1, border_color="#cbd5e1")
+        self.img_pred_frame.pack(pady=(0, 15))
+        self.img_pred_frame.pack_propagate(False)
+        self.lbl_pred_img = ctk.CTkLabel(self.img_pred_frame, text="Waiting...", font=(FONT_FAMILY, 10), text_color="#64748b")
+        self.lbl_pred_img.pack(fill="both", expand=True)
 
     def select_run_directly(self, run_id: int):
         self.controller.active_run_id = run_id
@@ -1602,6 +1675,13 @@ class RunsPage(ctk.CTkFrame):
                 stats_text += f"  ⚠️ {err}\n"
                 
         self.losses_lbl.configure(text=stats_text)
+        
+        # Load visuals for current epoch
+        run = db_get_run(self.controller.active_run_id)
+        if run:
+            name = run.get("name")
+            if name:
+                self.load_epoch_visuals(name, self.current_epoch)
 
     def stop_active_run(self):
         run_id = self.controller.active_run_id
@@ -1661,9 +1741,71 @@ class RunsPage(ctk.CTkFrame):
                 width=75, 
                 height=22, 
                 corner_radius=4,
+                fg_color="#1a73e8",
+                text_color="#ffffff",
+                hover_color="#155cb4",
                 command=lambda rid=run_id: self.select_run_directly(rid)
             )
             btn.pack(side="right", padx=5)
+
+    def load_epoch_visuals(self, run_name: str, epoch: int):
+        images_dir = Path("./checkpoints") / run_name / "web" / "images"
+        
+        # Check files for this epoch
+        real_A_path = images_dir / f"epoch{epoch:03d}_real_A.png"
+        fake_B_path = images_dir / f"epoch{epoch:03d}_fake_B.png"
+        real_B_path = images_dir / f"epoch{epoch:03d}_real_B.png"
+        
+        # If files don't exist for this epoch, try epoch-1
+        if not real_A_path.exists() and epoch > 1:
+            epoch = epoch - 1
+            real_A_path = images_dir / f"epoch{epoch:03d}_real_A.png"
+            fake_B_path = images_dir / f"epoch{epoch:03d}_fake_B.png"
+            real_B_path = images_dir / f"epoch{epoch:03d}_real_B.png"
+            
+        # Try latest if still not found
+        if not real_A_path.exists():
+            # Find any image files in the directory
+            all_real_A = sorted(list(images_dir.glob("*_real_A.png")))
+            if all_real_A:
+                real_A_path = all_real_A[-1]
+                # Extract epoch from filename e.g. epoch001_real_A.png
+                epoch_str = real_A_path.name.split("_")[0].replace("epoch", "")
+                try:
+                    epoch = int(epoch_str)
+                except:
+                    pass
+                fake_B_path = images_dir / f"epoch{epoch:03d}_fake_B.png"
+                real_B_path = images_dir / f"epoch{epoch:03d}_real_B.png"
+                
+        if real_A_path.exists() and fake_B_path.exists() and real_B_path.exists():
+            try:
+                self.preview_epoch_lbl.configure(text=f"Displaying visuals from Epoch {epoch}", text_color="#10b981")
+                
+                # Input image
+                img_in = Image.open(real_A_path)
+                ctk_in = ctk.CTkImage(light_image=img_in, size=(220, 220))
+                self.lbl_input_img.configure(image=ctk_in, text="")
+                self.lbl_input_img.image = ctk_in  # keep reference
+                
+                # Ground truth
+                img_tgt = Image.open(real_B_path)
+                ctk_tgt = ctk.CTkImage(light_image=img_tgt, size=(220, 220))
+                self.lbl_target_img.configure(image=ctk_tgt, text="")
+                self.lbl_target_img.image = ctk_tgt
+                
+                # Prediction
+                img_pred = Image.open(fake_B_path)
+                ctk_pred = ctk.CTkImage(light_image=img_pred, size=(220, 220))
+                self.lbl_pred_img.configure(image=ctk_pred, text="")
+                self.lbl_pred_img.image = ctk_pred
+            except Exception as e:
+                print(f"Error loading preview images: {e}")
+        else:
+            self.preview_epoch_lbl.configure(text="No visuals generated yet for this run", text_color="#64748b")
+            self.lbl_input_img.configure(image=None, text="Input (real_A)\nWaiting...")
+            self.lbl_target_img.configure(image=None, text="Ground Truth (real_B)\nWaiting...")
+            self.lbl_pred_img.configure(image=None, text="Prediction (fake_B)\nWaiting...")
 
     def on_show(self):
         runs = db_get_all_runs()
@@ -1778,6 +1920,7 @@ class CheckpointsPage(ctk.CTkFrame):
                     font=FONT_BUTTON, 
                     fg_color="#ef4444", 
                     hover_color="#dc2626",
+                    text_color="#ffffff",
                     width=90, 
                     height=24,
                     corner_radius=4,
@@ -1803,6 +1946,692 @@ class CheckpointsPage(ctk.CTkFrame):
 
     def on_show(self):
         self.scan_checkpoints()
+
+
+# ==========================================
+# PAGE 6: DATA PREPROCESSING PAGE
+# ==========================================
+class PreprocessPage(ctk.CTkFrame):
+    def __init__(self, parent, controller: Pix2PixGUI):
+        super().__init__(parent, fg_color="transparent")
+        self.controller = controller
+        
+        # Process references
+        self.process = None
+        self.log_thread = None
+        
+        # Header
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.pack(fill="x", pady=(0, 20))
+        
+        back_btn = ctk.CTkButton(
+            header, 
+            text="⏴ Dashboard", 
+            font=FONT_BUTTON, 
+            width=130, 
+            height=34, 
+            corner_radius=17, 
+            fg_color="#f1f5f9", 
+            text_color="#0f172a", 
+            hover_color="#e2e8f0", 
+            border_width=1,
+            border_color="#cbd5e1",
+            command=self.go_back
+        )
+        back_btn.pack(side="left")
+        
+        title = ctk.CTkLabel(header, text="  Dataset Preprocessing & Tiling", font=FONT_HEADING, text_color="#0f172a")
+        title.pack(side="left", padx=10)
+        
+        # Form panel
+        form = ctk.CTkFrame(self, fg_color="#ffffff", corner_radius=16, border_width=1, border_color="#e2e8f0")
+        form.pack(fill="both", expand=True, ipady=15)
+        
+        form.grid_columnconfigure(0, weight=1)
+        form.grid_columnconfigure(1, weight=1)
+        
+        # Row 0: Input Directory
+        ctk.CTkLabel(form, text="Raw Satellite Data Folder (Input Directory):", font=FONT_LABEL, text_color="#334155").grid(row=0, column=0, padx=30, pady=(20, 2), sticky="w")
+        input_row = ctk.CTkFrame(form, fg_color="transparent")
+        input_row.grid(row=1, column=0, padx=30, pady=2, sticky="ew")
+        self.inp_input_dir = ctk.CTkEntry(input_row, height=35, corner_radius=8, font=(FONT_FAMILY, 12))
+        self.inp_input_dir.pack(side="left", fill="x", expand=True)
+        self.inp_input_dir.insert(0, "/home/sankhya/Coding/Python/GAN-ml-/Guwahati_Azara_dataset")
+        
+        browse_input_btn = ctk.CTkButton(
+            input_row, 
+            text="Browse...", 
+            font=FONT_BUTTON, 
+            width=90, 
+            height=35, 
+            corner_radius=8, 
+            fg_color="#f1f5f9", 
+            text_color="#0f172a", 
+            hover_color="#e2e8f0", 
+            border_width=1, 
+            border_color="#cbd5e1",
+            command=self.browse_input_dir
+        )
+        browse_input_btn.pack(side="left", padx=(10, 0))
+        
+        # Row 0: Output Directory
+        ctk.CTkLabel(form, text="Processed Dataset Path (Output Directory):", font=FONT_LABEL, text_color="#334155").grid(row=0, column=1, padx=30, pady=(20, 2), sticky="w")
+        output_row = ctk.CTkFrame(form, fg_color="transparent")
+        output_row.grid(row=1, column=1, padx=30, pady=2, sticky="ew")
+        self.inp_output_dir = ctk.CTkEntry(output_row, height=35, corner_radius=8, font=(FONT_FAMILY, 12))
+        self.inp_output_dir.pack(side="left", fill="x", expand=True)
+        self.inp_output_dir.insert(0, "/home/sankhya/Coding/Python/GAN-ml-/datasets/guwahati_azara_processed")
+        
+        browse_output_btn = ctk.CTkButton(
+            output_row, 
+            text="Browse...", 
+            font=FONT_BUTTON, 
+            width=90, 
+            height=35, 
+            corner_radius=8, 
+            fg_color="#f1f5f9", 
+            text_color="#0f172a", 
+            hover_color="#e2e8f0", 
+            border_width=1, 
+            border_color="#cbd5e1",
+            command=self.browse_output_dir
+        )
+        browse_output_btn.pack(side="left", padx=(10, 0))
+        
+        # Row 1: Parameters (Tile Size, Stride, Max Nodata)
+        param_frame = ctk.CTkFrame(form, fg_color="transparent")
+        param_frame.grid(row=2, column=0, columnspan=2, padx=30, pady=15, sticky="ew")
+        param_frame.grid_columnconfigure(0, weight=1)
+        param_frame.grid_columnconfigure(1, weight=1)
+        param_frame.grid_columnconfigure(2, weight=1)
+        
+        # Tile size
+        ctk.CTkLabel(param_frame, text="Tile Size (px):", font=FONT_LABEL, text_color="#334155").grid(row=0, column=0, padx=10, pady=2, sticky="w")
+        self.inp_tile_size = ctk.CTkEntry(param_frame, width=150, height=35, corner_radius=8, font=(FONT_FAMILY, 12))
+        self.inp_tile_size.grid(row=1, column=0, padx=10, pady=2, sticky="w")
+        self.inp_tile_size.insert(0, "256")
+        
+        # Stride
+        ctk.CTkLabel(param_frame, text="Stride (overlap helper):", font=FONT_LABEL, text_color="#334155").grid(row=0, column=1, padx=10, pady=2, sticky="w")
+        self.inp_stride = ctk.CTkEntry(param_frame, width=150, height=35, corner_radius=8, font=(FONT_FAMILY, 12))
+        self.inp_stride.grid(row=1, column=1, padx=10, pady=2, sticky="w")
+        self.inp_stride.insert(0, "192")
+        
+        # Nodata Ratio
+        ctk.CTkLabel(param_frame, text="Max No-Data Ratio (0.0 - 1.0):", font=FONT_LABEL, text_color="#334155").grid(row=0, column=2, padx=10, pady=2, sticky="w")
+        self.inp_nodata = ctk.CTkEntry(param_frame, width=150, height=35, corner_radius=8, font=(FONT_FAMILY, 12))
+        self.inp_nodata.grid(row=1, column=2, padx=10, pady=2, sticky="w")
+        self.inp_nodata.insert(0, "0.15")
+
+        # Row 2: Status indicator and Buttons
+        action_row = ctk.CTkFrame(form, fg_color="transparent")
+        action_row.grid(row=3, column=0, columnspan=2, padx=30, pady=10, sticky="ew")
+        
+        self.btn_run = ctk.CTkButton(
+            action_row, 
+            text="🚀 Run Preprocessing", 
+            font=FONT_BUTTON, 
+            width=180, 
+            height=40, 
+            corner_radius=20, 
+            fg_color="#0284c7",
+            hover_color="#0369a1",
+            text_color="#ffffff",
+            command=self.start_preprocess
+        )
+        self.btn_run.pack(side="left")
+        
+        self.btn_stop = ctk.CTkButton(
+            action_row, 
+            text="⏹ Stop", 
+            font=FONT_BUTTON, 
+            width=100, 
+            height=40, 
+            corner_radius=20, 
+            fg_color="#ef4444", 
+            hover_color="#dc2626", 
+            state="disabled",
+            text_color="#ffffff",
+            command=self.stop_preprocess
+        )
+        self.btn_stop.pack(side="left", padx=(15, 0))
+        
+        self.status_lbl = ctk.CTkLabel(action_row, text="Status: Ready", font=(FONT_FAMILY, 12, "bold"), text_color="#475569")
+        self.status_lbl.pack(side="right", padx=10)
+
+        # Row 3.5: Progress Loading Bar (on Row 4)
+        self.progress_frame = ctk.CTkFrame(form, fg_color="transparent")
+        self.progress_frame.grid(row=4, column=0, columnspan=2, padx=30, pady=(10, 5), sticky="ew")
+        
+        self.progress_bar = ctk.CTkProgressBar(self.progress_frame, orientation="horizontal", height=10, corner_radius=5, progress_color="#0284c7")
+        self.progress_bar.pack(fill="x", side="left", expand=True)
+        self.progress_bar.set(0.0)
+        
+        self.progress_pct_lbl = ctk.CTkLabel(self.progress_frame, text="0%", font=(FONT_FAMILY, 11, "bold"), text_color="#0284c7", width=40)
+        self.progress_pct_lbl.pack(side="right", padx=(10, 0))
+        
+        # Row 4: Log display area
+        ctk.CTkLabel(form, text="Standard Output Logs:", font=FONT_LABEL, text_color="#334155").grid(row=5, column=0, columnspan=2, padx=30, pady=(15, 2), sticky="w")
+        
+        self.log_textbox = ctk.CTkTextbox(form, height=280, corner_radius=12, border_width=1, border_color="#cbd5e1", font=("Courier New", 12))
+        self.log_textbox.grid(row=6, column=0, columnspan=2, padx=30, pady=(2, 15), sticky="nsew")
+        form.grid_rowconfigure(6, weight=1)
+
+    def browse_input_dir(self):
+        dir_path = filedialog.askdirectory(initialdir=self.inp_input_dir.get())
+        if dir_path:
+            self.inp_input_dir.delete(0, "end")
+            self.inp_input_dir.insert(0, dir_path)
+            
+    def browse_output_dir(self):
+        dir_path = filedialog.askdirectory(initialdir=self.inp_output_dir.get())
+        if dir_path:
+            self.inp_output_dir.delete(0, "end")
+            self.inp_output_dir.insert(0, dir_path)
+            
+    def start_preprocess(self):
+        input_dir = self.inp_input_dir.get().strip()
+        output_dir = self.inp_output_dir.get().strip()
+        tile_size = self.inp_tile_size.get().strip()
+        stride = self.inp_stride.get().strip()
+        max_nodata = self.inp_nodata.get().strip()
+        
+        if not input_dir or not output_dir:
+            messagebox.showerror("Error", "Please fill in both input and output directories.")
+            return
+            
+        cmd = [
+            "/home/sankhya/Python/bin/python3", "datasets/prepare_satellite_dataset.py",
+            "--input_dir", input_dir,
+            "--output_dir", output_dir,
+            "--tile_size", tile_size,
+            "--stride", stride,
+            "--max_nodata_ratio", max_nodata
+        ]
+        
+        self.log_textbox.delete("1.0", "end")
+        self.log_textbox.insert("end", f"Starting preprocessing process:\nCommand: {' '.join(cmd)}\n\n")
+        
+        self.progress_bar.set(0.0)
+        self.progress_pct_lbl.configure(text="0%")
+        self.total_scenes = 1
+        self.current_scene = 0
+        
+        self.btn_run.configure(state="disabled")
+        self.btn_stop.configure(state="normal")
+        self.status_lbl.configure(text="Status: Preprocessing...", text_color="#0284c7")
+        
+        try:
+            self.process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                preexec_fn=os.setsid,
+                cwd=str(Path(__file__).parent.absolute())
+            )
+            
+            self.log_thread = threading.Thread(target=self.monitor_output, daemon=True)
+            self.log_thread.start()
+        except Exception as e:
+            self.log_textbox.insert("end", f"Failed to start process: {str(e)}\n")
+            self.status_lbl.configure(text="Status: Failed to start", text_color="#ef4444")
+            self.btn_run.configure(state="normal")
+            self.btn_stop.configure(state="disabled")
+            
+    def monitor_output(self):
+        try:
+            while True:
+                line = self.process.stdout.readline()
+                if not line and self.process.poll() is not None:
+                    break
+                if line:
+                    decoded = line.decode("utf-8", errors="ignore")
+                    self.after(0, lambda msg=decoded: self.append_log(msg))
+                    
+            ret_code = self.process.poll()
+            if ret_code == 0:
+                self.after(0, self.preprocessing_done)
+            else:
+                self.after(0, lambda: self.preprocessing_failed(f"Process exited with code {ret_code}"))
+        except Exception as e:
+            self.after(0, lambda: self.preprocessing_failed(str(e)))
+            
+    def append_log(self, text):
+        self.log_textbox.insert("end", text)
+        self.log_textbox.see("end")
+        
+        # Parse progress
+        match_total = re.search(r"Found (\d+) unique Landsat scenes", text)
+        if match_total:
+            self.total_scenes = max(1, int(match_total.group(1)))
+            self.current_scene = 0
+            self.progress_bar.set(0.0)
+            self.progress_pct_lbl.configure(text="0%")
+            
+        match_scene = re.search(r"Processing scene:", text)
+        if match_scene:
+            self.current_scene += 1
+            progress_val = min(0.95, self.current_scene / self.total_scenes)
+            self.progress_bar.set(progress_val)
+            self.progress_pct_lbl.configure(text=f"{int(progress_val * 100)}%")
+            
+        if "Dataset Preprocessing Complete!" in text:
+            self.progress_bar.set(1.0)
+            self.progress_pct_lbl.configure(text="100%")
+        
+    def preprocessing_done(self):
+        self.status_lbl.configure(text="Status: Completed successfully!", text_color="#10b981")
+        self.btn_run.configure(state="normal")
+        self.btn_stop.configure(state="disabled")
+        messagebox.showinfo("Success", "Preprocessing completed successfully! Processed tiles are saved.")
+        # Trigger an update of datasets options in TrainPage
+        self.controller.train_page.on_show()
+        
+    def preprocessing_failed(self, err_msg):
+        self.status_lbl.configure(text="Status: Preprocessing failed", text_color="#ef4444")
+        self.btn_run.configure(state="normal")
+        self.btn_stop.configure(state="disabled")
+        self.log_textbox.insert("end", f"\nError: {err_msg}\n")
+        messagebox.showerror("Failed", f"Preprocessing failed: {err_msg}")
+        
+    def stop_preprocess(self):
+        if not self.process:
+            return
+        try:
+            import signal
+            os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
+            self.status_lbl.configure(text="Status: Stopped by user", text_color="#f59e0b")
+            self.log_textbox.insert("end", "\nProcess terminated by user.\n")
+            self.btn_run.configure(state="normal")
+            self.btn_stop.configure(state="disabled")
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not stop process: {str(e)}")
+            
+    def on_show(self):
+        pass
+
+    def go_back(self):
+        self.controller.show_page("home")
+
+
+
+# ==========================================
+# PAGE 7: TEST MODEL INTERACTIVE INFERENCE
+# ==========================================
+class TestModelPage(ctk.CTkFrame):
+    def __init__(self, parent, controller: Pix2PixGUI):
+        super().__init__(parent, fg_color="transparent")
+        self.controller = controller
+        
+        # ML state
+        self.netG = None
+        self.current_model_path = None
+        self.selected_img_path = None
+        self.cached_input_img = None
+        self.cached_target_img = None
+        
+        # Header
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.pack(fill="x", pady=(0, 20))
+        
+        back_btn = ctk.CTkButton(
+            header, 
+            text="⏴ Dashboard", 
+            font=FONT_BUTTON, 
+            width=130, 
+            height=34, 
+            corner_radius=17, 
+            fg_color="#f1f5f9", 
+            text_color="#0f172a", 
+            hover_color="#e2e8f0", 
+            border_width=1,
+            border_color="#cbd5e1",
+            command=self.go_back
+        )
+        back_btn.pack(side="left")
+        
+        title = ctk.CTkLabel(header, text="  Interactive Model Inference Tester", font=FONT_HEADING, text_color="#0f172a")
+        title.pack(side="left", padx=10)
+        
+        grid_panel = ctk.CTkFrame(self, fg_color="transparent")
+        grid_panel.pack(fill="both", expand=True)
+        grid_panel.grid_columnconfigure(0, weight=1)
+        grid_panel.grid_columnconfigure(1, weight=1)
+        grid_panel.grid_rowconfigure(0, weight=1)
+        
+        # Left: Controls
+        controls_panel = ctk.CTkFrame(grid_panel, fg_color="#ffffff", corner_radius=16, border_width=1, border_color="#e2e8f0")
+        controls_panel.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+        
+        ctk.CTkLabel(controls_panel, text="Control Panel", font=(FONT_FAMILY, 14, "bold"), text_color="#0f172a").pack(pady=(15, 10))
+        
+        # Model selector
+        ctk.CTkLabel(controls_panel, text="Select Model Folder:", font=FONT_LABEL, text_color="#334155").pack(anchor="w", padx=30, pady=(10, 2))
+        self.model_dropdown = ctk.CTkOptionMenu(controls_panel, height=35, corner_radius=8, command=self.on_model_selected)
+        self.model_dropdown.pack(fill="x", padx=30, pady=2)
+        
+        # Epoch Checkpoint Selector
+        ctk.CTkLabel(controls_panel, text="Select Checkpoint Suffix:", font=FONT_LABEL, text_color="#334155").pack(anchor="w", padx=30, pady=(10, 2))
+        self.epoch_dropdown = ctk.CTkOptionMenu(controls_panel, height=35, corner_radius=8)
+        self.epoch_dropdown.pack(fill="x", padx=30, pady=2)
+        
+        self.btn_load = ctk.CTkButton(
+            controls_panel, 
+            text="📥 Load Model Checkpoint", 
+            font=FONT_BUTTON, 
+            height=38, 
+            corner_radius=8, 
+            fg_color="#1a73e8", 
+            hover_color="#155cb4",
+            text_color="#ffffff",
+            command=self.load_checkpoint
+        )
+        self.btn_load.pack(fill="x", padx=30, pady=15)
+        
+        # Image selector
+        ctk.CTkLabel(controls_panel, text="Select Input Image:", font=FONT_LABEL, text_color="#334155").pack(anchor="w", padx=30, pady=(20, 2))
+        self.btn_browse = ctk.CTkButton(
+            controls_panel, 
+            text="📁 Browse Image File...", 
+            font=FONT_BUTTON, 
+            height=38, 
+            corner_radius=8, 
+            fg_color="#f1f5f9", 
+            text_color="#0f172a", 
+            hover_color="#e2e8f0", 
+            border_width=1, 
+            border_color="#cbd5e1",
+            command=self.browse_image
+        )
+        self.btn_browse.pack(fill="x", padx=30, pady=5)
+        
+        self.lbl_file_path = ctk.CTkLabel(controls_panel, text="No image selected", font=(FONT_FAMILY, 11), text_color="#64748b", wraplength=400, justify="left")
+        self.lbl_file_path.pack(anchor="w", padx=30, pady=(2, 10))
+        
+        # Checkbox for using Train Mode (for Batchnorm / Dropout look)
+        self.var_train_mode = ctk.BooleanVar(value=False)
+        self.chk_train_mode = ctk.CTkCheckBox(
+            controls_panel, 
+            text="Use Train Mode Stats & Dropout", 
+            variable=self.var_train_mode, 
+            font=(FONT_FAMILY, 11),
+            text_color="#475569"
+        )
+        self.chk_train_mode.pack(anchor="w", padx=30, pady=(0, 15))
+        
+        # Run Button
+        self.btn_predict = ctk.CTkButton(
+            controls_panel, 
+            text="⚡ Run Prediction / Inference", 
+            font=(FONT_FAMILY, 13, "bold"), 
+            height=46, 
+            corner_radius=23, 
+            fg_color="#0f9d58", 
+            hover_color="#0b7a44", 
+            text_color="#ffffff",
+            state="disabled",
+            command=self.run_prediction
+        )
+        self.btn_predict.pack(fill="x", padx=30, pady=25)
+        
+        self.lbl_status = ctk.CTkLabel(controls_panel, text="Status: Load a model to begin", font=(FONT_FAMILY, 11, "bold"), text_color="#475569")
+        self.lbl_status.pack(pady=5)
+        
+        # Right: Predictions Preview (Vertical Stack)
+        preview_panel = ctk.CTkFrame(grid_panel, fg_color="#ffffff", corner_radius=16, border_width=1, border_color="#e2e8f0")
+        preview_panel.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
+        
+        ctk.CTkLabel(preview_panel, text="Inference Previews", font=(FONT_FAMILY, 14, "bold"), text_color="#0f172a").pack(pady=(15, 5))
+        
+        # 1. Input Image
+        ctk.CTkLabel(preview_panel, text="INPUT IMAGE (Thermal IR / Domain A)", font=(FONT_FAMILY, 10, "bold"), text_color="#475569").pack(pady=(5, 2))
+        self.frame_in = ctk.CTkFrame(preview_panel, width=220, height=220, corner_radius=8, fg_color="#f8fafc", border_width=1, border_color="#cbd5e1")
+        self.frame_in.pack(pady=(0, 10))
+        self.frame_in.pack_propagate(False)
+        self.lbl_in = ctk.CTkLabel(self.frame_in, text="No Input Image", font=(FONT_FAMILY, 11), text_color="#94a3b8")
+        self.lbl_in.pack(fill="both", expand=True)
+        
+        # 2. Expected Target
+        ctk.CTkLabel(preview_panel, text="EXPECTED TARGET (Ground Truth RGB / Domain B)", font=(FONT_FAMILY, 10, "bold"), text_color="#475569").pack(pady=(5, 2))
+        self.frame_tgt = ctk.CTkFrame(preview_panel, width=220, height=220, corner_radius=8, fg_color="#f8fafc", border_width=1, border_color="#cbd5e1")
+        self.frame_tgt.pack(pady=(0, 10))
+        self.frame_tgt.pack_propagate(False)
+        self.lbl_tgt = ctk.CTkLabel(self.frame_tgt, text="Ground Truth not available", font=(FONT_FAMILY, 11), text_color="#94a3b8")
+        self.lbl_tgt.pack(fill="both", expand=True)
+        
+        # 3. Model Output
+        ctk.CTkLabel(preview_panel, text="MODEL PREDICTION (Generated RGB / Fake B)", font=(FONT_FAMILY, 10, "bold"), text_color="#475569").pack(pady=(5, 2))
+        self.frame_out = ctk.CTkFrame(preview_panel, width=220, height=220, corner_radius=8, fg_color="#f8fafc", border_width=1, border_color="#cbd5e1")
+        self.frame_out.pack(pady=(0, 15))
+        self.frame_out.pack_propagate(False)
+        self.lbl_out = ctk.CTkLabel(self.frame_out, text="Prediction pending", font=(FONT_FAMILY, 11), text_color="#94a3b8")
+        self.lbl_out.pack(fill="both", expand=True)
+
+    def go_back(self):
+        self.controller.show_page("home")
+        
+    def on_show(self):
+        # Scan models directories
+        folders = []
+        path = Path("./checkpoints")
+        if path.exists():
+            for d in path.iterdir():
+                if d.is_dir() and d.name != "web":
+                    folders.append(d.name)
+        if not folders:
+            folders = ["guwahati_azara_pix2pix"]
+            
+        self.model_dropdown.configure(values=folders)
+        self.model_dropdown.set(folders[0])
+        self.on_model_selected(folders[0])
+        
+    def on_model_selected(self, model_folder: str):
+        path = Path("./checkpoints") / model_folder
+        epochs = []
+        if path.exists():
+            for f in path.iterdir():
+                if f.is_file() and f.suffix == ".pth" and "net_G" in f.name:
+                    prefix = f.name.split("_net_G")[0]
+                    if prefix not in epochs:
+                        epochs.append(prefix)
+        if not epochs:
+            epochs = ["latest"]
+            
+        num_epochs = sorted([int(e) for e in epochs if e.isdigit()])
+        str_epochs = sorted([e for e in epochs if not e.isdigit()])
+        sorted_epochs = str_epochs + [str(e) for e in num_epochs]
+        
+        self.epoch_dropdown.configure(values=sorted_epochs)
+        self.epoch_dropdown.set(sorted_epochs[0])
+        
+    def load_checkpoint(self):
+        model_folder = self.model_dropdown.get()
+        epoch = self.epoch_dropdown.get()
+        model_dir = Path("./checkpoints") / model_folder
+        checkpoint_path = model_dir / f"{epoch}_net_G.pth"
+        
+        if not checkpoint_path.exists():
+            messagebox.showerror("Error", f"Checkpoint file '{checkpoint_path.name}' not found.")
+            return
+            
+        try:
+            # Parse train options to ensure correct network setup
+            opt_path = model_dir / "train_opt.txt"
+            input_nc = 3
+            output_nc = 3
+            ngf = 64
+            netG_arch = "unet_256"
+            norm_type = "batch"
+            use_dropout = True
+            
+            if opt_path.exists():
+                try:
+                    with open(opt_path, "r") as f:
+                        for line in f:
+                            if ":" in line:
+                                parts = line.strip().split(":")
+                                key = parts[0].strip()
+                                val_part = parts[1].strip()
+                                val_list = val_part.split()
+                                val = val_list[0].strip() if val_list else ""
+                                
+                                if not val:
+                                    continue
+                                    
+                                if key == "input_nc":
+                                    input_nc = int(val)
+                                elif key == "output_nc":
+                                    output_nc = int(val)
+                                elif key == "ngf":
+                                    ngf = int(val)
+                                elif key == "netG":
+                                    netG_arch = val
+                                elif key == "norm":
+                                    norm_type = val
+                                elif key == "no_dropout":
+                                    use_dropout = not (val.lower() == "true")
+                except Exception as parse_err:
+                    print(f"Error parsing train_opt.txt: {parse_err}")
+            
+            import torch
+            from models import networks
+            
+            # Detect device
+            self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+            dev_name = self.device.type.upper()
+            if self.device.type == "cuda":
+                dev_name += f" ({torch.cuda.get_device_name(0)})"
+            
+            self.lbl_status.configure(text=f"Status: Loading checkpoint on {dev_name}...", text_color="#1a73e8")
+            self.update_idletasks()
+            
+            self.netG = networks.define_G(
+                input_nc=input_nc, 
+                output_nc=output_nc, 
+                ngf=ngf, 
+                netG=netG_arch, 
+                norm=norm_type, 
+                use_dropout=use_dropout
+            )
+            
+            state_dict = torch.load(str(checkpoint_path), map_location=self.device, weights_only=True)
+            if '_metadata' in state_dict:
+                del state_dict['_metadata']
+            self.netG.to(self.device)
+            self.netG.load_state_dict(state_dict)
+            self.netG.eval()
+            
+            self.current_model_path = checkpoint_path
+            self.lbl_status.configure(text=f"Status: Model Loaded on {self.device.type.upper()} ({epoch})!", text_color="#10b981")
+            
+            if self.selected_img_path:
+                self.btn_predict.configure(state="normal")
+        except Exception as e:
+            traceback.print_exc()
+            self.lbl_status.configure(text="Status: Failed to load", text_color="#ef4444")
+            messagebox.showerror("Error", f"Failed to load checkpoint: {str(e)}")
+            
+    def browse_image(self):
+        file_path = filedialog.askopenfilename(
+            filetypes=[
+                ("Image Files", "*.png *.jpg *.jpeg *.tif *.tiff *.bmp"),
+                ("All Files", "*.*")
+            ]
+        )
+        if not file_path:
+            return
+            
+        self.selected_img_path = file_path
+        self.lbl_file_path.configure(text=f"Selected: {Path(file_path).name}")
+        
+        try:
+            # Load input image
+            img = Image.open(file_path).convert("RGB")
+            w, h = img.size
+            
+            # Check if this is an aligned pair (512x256)
+            if w == h * 2:
+                # Left half is Domain A (input), Right half is Domain B (ground truth)
+                w2 = h
+                self.cached_input_img = img.crop((0, 0, w2, h))
+                self.cached_target_img = img.crop((w2, 0, w, h))
+                
+                # Update expected target preview
+                ctk_tgt = ctk.CTkImage(light_image=self.cached_target_img, size=(220, 220))
+                self.lbl_tgt.configure(image=ctk_tgt, text="")
+                self.lbl_tgt.image = ctk_tgt
+            else:
+                self.cached_input_img = img
+                self.cached_target_img = None
+                
+                # Reset expected target preview
+                self.lbl_tgt.configure(image=None, text="Ground Truth not available\n(Single-channel input)", text_color="#94a3b8")
+                
+            # Update input preview
+            ctk_in = ctk.CTkImage(light_image=self.cached_input_img, size=(220, 220))
+            self.lbl_in.configure(image=ctk_in, text="")
+            self.lbl_in.image = ctk_in
+            
+            # Reset prediction preview
+            self.lbl_out.configure(image=None, text="Prediction pending", text_color="#94a3b8")
+            
+            if self.netG:
+                self.btn_predict.configure(state="normal")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open image file: {e}")
+            
+    def run_prediction(self):
+        if not self.netG or not self.cached_input_img:
+            return
+            
+        try:
+            self.lbl_status.configure(text="Status: Generating prediction...", text_color="#1a73e8")
+            self.update_idletasks()
+            
+            import torch
+            import numpy as np
+            import torchvision.transforms as transforms
+            
+            # Setup transform to match input preprocessing in BaseDataset
+            transform = transforms.Compose([
+                transforms.Resize((256, 256), interpolation=transforms.InterpolationMode.BICUBIC),
+                transforms.ToTensor(),
+                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+            ])
+            
+            # Route input tensor to the loaded device (GPU/CPU)
+            device = getattr(self, "device", torch.device("cpu"))
+            input_tensor = transform(self.cached_input_img).unsqueeze(0).to(device)
+            
+            # Run prediction
+            if hasattr(self, 'var_train_mode') and self.var_train_mode.get():
+                self.netG.train()
+            else:
+                self.netG.eval()
+
+            with torch.no_grad():
+                output_tensor = self.netG(input_tensor)
+                
+            # Denormalize output from [-1, 1] to [0, 1] range and move back to CPU
+            output_tensor = (output_tensor.squeeze(0).cpu() + 1.0) / 2.0
+            output_tensor = output_tensor.clamp(0, 1)
+            
+            # Convert tensor to PIL image
+            output_numpy = output_tensor.cpu().numpy().transpose(1, 2, 0)
+            output_numpy = (output_numpy * 255.0).astype(np.uint8)
+            output_img = Image.fromarray(output_numpy)
+            
+            # Update prediction preview
+            ctk_out = ctk.CTkImage(light_image=output_img, size=(220, 220))
+            self.lbl_out.configure(image=ctk_out, text="")
+            self.lbl_out.image = ctk_out
+            
+            self.lbl_status.configure(text="Status: Inference completed!", text_color="#10b981")
+        except Exception as e:
+            traceback.print_exc()
+            self.lbl_status.configure(text="Status: Prediction failed", text_color="#ef4444")
+            messagebox.showerror("Error", f"Failed to execute prediction: {str(e)}")
+
 
 if __name__ == "__main__":
     app = Pix2PixGUI()
