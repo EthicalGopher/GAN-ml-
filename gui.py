@@ -678,44 +678,25 @@ class HomePage(ctk.CTkFrame):
         self.gpu_lbl = ctk.CTkLabel(self.status_bar, text="GPU Stats: Offline", font=(FONT_FAMILY, 11, "bold"), text_color="#475569")
         self.gpu_lbl.pack(side="right", padx=20)
         
-        # Cards Grid Frame
+        # Cards Grid Frame - 2 rows, 3 columns to optimize space
         self.grid_frame = ctk.CTkFrame(self.fg_wrapper, fg_color="transparent")
         self.grid_frame.pack(fill="both", expand=True)
         self.grid_frame.grid_columnconfigure(0, weight=1)
         self.grid_frame.grid_columnconfigure(1, weight=1)
-        self.grid_frame.grid_rowconfigure(0, weight=1)
-        self.grid_frame.grid_rowconfigure(1, weight=1)
-        self.grid_frame.grid_rowconfigure(2, weight=1)
-        
-        # Load asset files
-        self.img_train = self.load_card_image("train.jpg")
-        self.img_fine = self.load_card_image("finetune.jpg")
-        self.img_runs = self.load_card_image("runs.jpg")
-        self.img_checkpoints = self.load_card_image("checkpoints.jpg")
-        self.img_preprocess = self.load_card_image("preprocess.jpg")
-        self.img_test = self.load_card_image("test.jpg")
+        self.grid_frame.grid_columnconfigure(2, weight=1)
         
         # Create Cards
-        self.create_card(0, 0, "Train New Model", "Configure variables and start a new generative model training task.", self.img_train, lambda: self.controller.show_page("train"), "#1a73e8", "#e8f0fe")
-        self.create_card(0, 1, "Fine-tune Checkpoint", "Choose a pre-trained epoch checkpoint and configure parameters to resume.", self.img_fine, lambda: self.controller.show_page("finetune"), "#0f9d58", "#e6f4ea")
-        self.create_card(1, 0, "Monitoring & Real-time Logs", "Watch terminal standard output stream and monitor loss statistics live.", self.img_runs, lambda: self.controller.show_page("runs"), "#8b5cf6", "#f5f3ff")
-        self.create_card(1, 1, "Model Storage Explorer", "Browse checkpoints folder, review weight files, and clean up workspace storage.", self.img_checkpoints, lambda: self.controller.show_page("checkpoints"), "#f97316", "#fff7ed")
-        self.create_card(2, 0, "Dataset Preprocessing", "Select raw Landsat satellite scenes and preprocess/tile them for training.", self.img_preprocess, lambda: self.controller.show_page("preprocess"), "#0284c7", "#f0f9ff")
-        self.create_card(2, 1, "Interactive Model Tester", "Load checkpoints, select test images, and run immediate interactive inference.", self.img_test, lambda: self.controller.show_page("test_model"), "#0d9488", "#f0fdfa")
+        self.create_card(0, 0, "Train New Model", "Configure variables and start a new generative model training task.", lambda: self.controller.show_page("train"), "#1a73e8", "#e8f0fe")
+        self.create_card(0, 1, "Fine-tune Checkpoint", "Choose a pre-trained epoch checkpoint and configure parameters to resume.", lambda: self.controller.show_page("finetune"), "#0f9d58", "#e6f4ea")
+        self.create_card(0, 2, "Monitoring & Real-time Logs", "Watch terminal standard output stream and monitor loss statistics live.", lambda: self.controller.show_page("runs"), "#8b5cf6", "#f5f3ff")
+        self.create_card(1, 0, "Model Storage Explorer", "Browse checkpoints folder, review weight files, and clean up workspace storage.", lambda: self.controller.show_page("checkpoints"), "#f97316", "#fff7ed")
+        self.create_card(1, 1, "Dataset Preprocessing", "Select raw Landsat satellite scenes and preprocess/tile them for training.", lambda: self.controller.show_page("preprocess"), "#0284c7", "#f0f9ff")
+        self.create_card(1, 2, "Interactive Model Tester", "Load checkpoints, select test images, and run immediate interactive inference.", lambda: self.controller.show_page("test_model"), "#0d9488", "#f0fdfa")
 
-    def load_card_image(self, name: str) -> ctk.CTkImage:
-        path = Path(__file__).parent / "assets" / name
-        if path.exists():
-            try:
-                pil_img = Image.open(path)
-                return ctk.CTkImage(light_image=pil_img, size=(160, 160))
-            except Exception as e:
-                print(f"Failed loading card image {name}: {e}")
-        return None
-
-    def create_card(self, row: int, col: int, title: str, desc: str, ctk_img: ctk.CTkImage, command, accent_color: str, hover_bg: str, columnspan: int = 1):
-        card = ctk.CTkFrame(self.grid_frame, fg_color="#ffffff", corner_radius=16, border_width=1.5, border_color="#e2e8f0")
-        card.grid(row=row, column=col, columnspan=columnspan, padx=15, pady=15, sticky="nsew")
+    def create_card(self, row: int, col: int, title: str, desc: str, command, accent_color: str, hover_bg: str):
+        card = ctk.CTkFrame(self.grid_frame, width=320, height=200, fg_color="#ffffff", corner_radius=16, border_width=1.5, border_color="#e2e8f0")
+        card.grid(row=row, column=col, padx=15, pady=15)
+        card.pack_propagate(False)
         
         def on_enter(e):
             card.configure(border_color=accent_color, fg_color=hover_bg)
@@ -730,48 +711,33 @@ class HomePage(ctk.CTkFrame):
         top_bar.pack(fill="x", side="top")
         
         inner = ctk.CTkFrame(card, fg_color="transparent")
-        inner.pack(fill="both", expand=True, padx=20, pady=18)
-        inner.pack_propagate(False)
+        inner.pack(fill="both", expand=True, padx=20, pady=(15, 18))
         
-        for widget in (inner,):
-            widget.bind("<Enter>", on_enter)
-            widget.bind("<Leave>", on_leave)
-
-        left_p = ctk.CTkFrame(inner, fg_color="transparent")
-        left_p.pack(side="left", fill="both", expand=True, pady=5)
-        
-        lbl_title = ctk.CTkLabel(left_p, text=title, font=FONT_CARD_TITLE, text_color="#0f172a")
+        inner.bind("<Enter>", on_enter)
+        inner.bind("<Leave>", on_leave)
+            
+        lbl_title = ctk.CTkLabel(inner, text=title, font=FONT_CARD_TITLE, text_color="#0f172a")
         lbl_title.pack(anchor="w")
+        lbl_title.bind("<Enter>", on_enter)
+        lbl_title.bind("<Leave>", on_leave)
         
-        lbl_desc = ctk.CTkLabel(left_p, text=desc, font=FONT_CARD_DESC, text_color="#64748b", wraplength=500 if columnspan > 1 else 230, justify="left")
-        lbl_desc.pack(anchor="w", pady=(8, 15))
+        lbl_desc = ctk.CTkLabel(inner, text=desc, font=FONT_CARD_DESC, text_color="#64748b", wraplength=275, justify="left")
+        lbl_desc.pack(anchor="w", pady=(6, 12), fill="both", expand=True)
+        lbl_desc.bind("<Enter>", on_enter)
+        lbl_desc.bind("<Leave>", on_leave)
         
         btn = ctk.CTkButton(
-            left_p, 
+            inner, 
             text="Open Action ➔", 
             font=FONT_BUTTON, 
-            width=135, 
-            height=34, 
-            corner_radius=17, 
+            height=36, 
+            corner_radius=18, 
             fg_color=accent_color,
             hover_color=accent_color,
             text_color="#ffffff",
             command=command
         )
-        btn.pack(anchor="w")
-        
-        img_frame = ctk.CTkFrame(inner, width=150, height=150, corner_radius=10, fg_color="#ffffff", border_width=1, border_color="#f1f5f9")
-        img_frame.pack(side="right", padx=(10, 0))
-        img_frame.pack_propagate(False)
-        
-        if ctk_img:
-            img_lbl = ctk.CTkLabel(img_frame, image=ctk_img, text="")
-            img_lbl.pack(fill="both", expand=True)
-            img_lbl.bind("<Enter>", on_enter)
-            img_lbl.bind("<Leave>", on_leave)
-        else:
-            fallback = ctk.CTkLabel(img_frame, text="⚙️", font=(FONT_FAMILY, 40))
-            fallback.pack(fill="both", expand=True)
+        btn.pack(fill="x", side="bottom")
 
 
 
