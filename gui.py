@@ -2140,7 +2140,7 @@ class PreprocessPage(ctk.CTkFrame):
             return
             
         cmd = [
-            sys.executable, "datasets/prepare_satellite_dataset.py",
+            sys.executable, "prepare_satellite_dataset.py",
             "--input_dir", input_dir,
             "--output_dir", output_dir,
             "--tile_size", tile_size,
