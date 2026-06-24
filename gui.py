@@ -298,14 +298,18 @@ class Pix2PixGUI(ctk.CTk):
             else:
                 env["CUDA_VISIBLE_DEVICES"] = gpu_ids
                 
-        # Start subprocess
+        # Start subprocess dynamically based on platform (Windows vs Unix)
+        kwargs = {}
+        if platform.system() != "Windows":
+            kwargs["preexec_fn"] = os.setsid
+            
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            preexec_fn=os.setsid,
             env=env,
-            cwd=str(Path(__file__).parent.absolute())
+            cwd=str(Path(__file__).parent.absolute()),
+            **kwargs
         )
         
         db_update_run(run_id, {
@@ -385,8 +389,12 @@ class Pix2PixGUI(ctk.CTk):
             return False
             
         try:
-            import signal
-            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+            if platform.system() == "Windows":
+                # Taskkill forces termination of process tree
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(process.pid)], capture_output=True)
+            else:
+                import signal
+                os.killpg(os.getpgid(process.pid), signal.SIGTERM)
             db_update_run(run_id, {
                 "status": "stopped",
                 "pid": None,
@@ -406,15 +414,21 @@ class Pix2PixGUI(ctk.CTk):
         for r_id, proc in list(self.processes.items()):
             try:
                 if proc.poll() is None:
-                    import signal
-                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                    if platform.system() == "Windows":
+                        subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True)
+                    else:
+                        import signal
+                        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
             except Exception:
                 pass
         try:
             if hasattr(self, "preprocess_page") and self.preprocess_page.process:
                 if self.preprocess_page.process.poll() is None:
-                    import signal
-                    os.killpg(os.getpgid(self.preprocess_page.process.pid), signal.SIGTERM)
+                    if platform.system() == "Windows":
+                        subprocess.run(["taskkill", "/F", "/T", "/PID", str(self.preprocess_page.process.pid)], capture_output=True)
+                    else:
+                        import signal
+                        os.killpg(os.getpgid(self.preprocess_page.process.pid), signal.SIGTERM)
         except Exception:
             pass
         try:
@@ -699,7 +713,7 @@ class HomePage(ctk.CTkFrame):
         self.create_card(0, 1, "Fine-tune Checkpoint", "Choose a pre-trained epoch checkpoint and configure parameters to resume.", lambda: self.controller.show_page("finetune"), "#0f9d58", "#e6f4ea")
         self.create_card(0, 2, "Monitoring & Real-time Logs", "Watch terminal standard output stream and monitor loss statistics live.", lambda: self.controller.show_page("runs"), "#8b5cf6", "#f5f3ff")
         self.create_card(1, 0, "Model Storage Explorer", "Browse checkpoints folder, review weight files, and clean up workspace storage.", lambda: self.controller.show_page("checkpoints"), "#f97316", "#fff7ed")
-        self.create_card(1, 1, "Dataset Preprocessing", "Select raw Landsat satellite scenes and preprocess/tile them for training.", lambda: self.controller.show_page("preprocess"), "#0284c7", "#f0f9ff")
+        self.create_card(1, 1, "Dataset Preprocessing", "Select raw Landsat satellite scenes and preprocess/tile them for training.", lambda: messagebox.showerror("Platform Not Supported", "Dataset Preprocessing is only supported on Linux and Windows due to specialized satellite science and remote sensing library dependencies.") if platform.system() not in ("Linux", "Windows") else self.controller.show_page("preprocess"), "#0284c7", "#f0f9ff")
         self.create_card(1, 2, "Interactive Model Tester", "Load checkpoints, select test images, and run immediate interactive inference.", lambda: self.controller.show_page("test_model"), "#0d9488", "#f0fdfa")
 
     def create_card(self, row: int, col: int, title: str, desc: str, command, accent_color: str, hover_bg: str):
@@ -1931,6 +1945,9 @@ class PreprocessPage(ctk.CTkFrame):
         super().__init__(parent, fg_color="transparent")
         self.controller = controller
         
+        # Get project root dynamically
+        self.project_dir = Path(__file__).parent.absolute()
+        
         # Process references
         self.process = None
         self.log_thread = None
@@ -1971,7 +1988,7 @@ class PreprocessPage(ctk.CTkFrame):
         input_row.grid(row=1, column=0, padx=30, pady=2, sticky="ew")
         self.inp_input_dir = ctk.CTkEntry(input_row, height=35, corner_radius=8, font=(FONT_FAMILY, 12))
         self.inp_input_dir.pack(side="left", fill="x", expand=True)
-        self.inp_input_dir.insert(0, "/home/sankhya/Coding/Python/GAN-ml-/Guwahati_Azara_dataset")
+        self.inp_input_dir.insert(0, str(self.project_dir / "Guwahati_Azara_dataset"))
         
         browse_input_btn = ctk.CTkButton(
             input_row, 
@@ -1995,7 +2012,7 @@ class PreprocessPage(ctk.CTkFrame):
         output_row.grid(row=1, column=1, padx=30, pady=2, sticky="ew")
         self.inp_output_dir = ctk.CTkEntry(output_row, height=35, corner_radius=8, font=(FONT_FAMILY, 12))
         self.inp_output_dir.pack(side="left", fill="x", expand=True)
-        self.inp_output_dir.insert(0, "/home/sankhya/Coding/Python/GAN-ml-/datasets/guwahati_azara_processed")
+        self.inp_output_dir.insert(0, str(self.project_dir / "datasets" / "guwahati_azara_processed"))
         
         browse_output_btn = ctk.CTkButton(
             output_row, 
@@ -2105,6 +2122,13 @@ class PreprocessPage(ctk.CTkFrame):
             self.inp_output_dir.insert(0, dir_path)
             
     def start_preprocess(self):
+        if platform.system() not in ("Linux", "Windows"):
+            messagebox.showerror(
+                "Platform Not Supported",
+                "Dataset Preprocessing is only supported on Linux and Windows due to specialized satellite science and remote sensing library dependencies."
+            )
+            return
+
         input_dir = self.inp_input_dir.get().strip()
         output_dir = self.inp_output_dir.get().strip()
         tile_size = self.inp_tile_size.get().strip()
@@ -2116,7 +2140,7 @@ class PreprocessPage(ctk.CTkFrame):
             return
             
         cmd = [
-            "/home/sankhya/Python/bin/python3", "datasets/prepare_satellite_dataset.py",
+            sys.executable, "datasets/prepare_satellite_dataset.py",
             "--input_dir", input_dir,
             "--output_dir", output_dir,
             "--tile_size", tile_size,
@@ -2136,13 +2160,18 @@ class PreprocessPage(ctk.CTkFrame):
         self.btn_stop.configure(state="normal")
         self.status_lbl.configure(text="Status: Preprocessing...", text_color="#0284c7")
         
+        # Prepare platform-safe kwargs
+        kwargs = {}
+        if platform.system() != "Windows":
+            kwargs["preexec_fn"] = os.setsid
+
         try:
             self.process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                preexec_fn=os.setsid,
-                cwd=str(Path(__file__).parent.absolute())
+                cwd=str(Path(__file__).parent.absolute()),
+                **kwargs
             )
             
             self.log_thread = threading.Thread(target=self.monitor_output, daemon=True)
@@ -2213,8 +2242,11 @@ class PreprocessPage(ctk.CTkFrame):
         if not self.process:
             return
         try:
-            import signal
-            os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
+            if platform.system() == "Windows":
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(self.process.pid)], capture_output=True)
+            else:
+                import signal
+                os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
             self.status_lbl.configure(text="Status: Stopped by user", text_color="#f59e0b")
             self.log_textbox.insert("end", "\nProcess terminated by user.\n")
             self.btn_run.configure(state="normal")
@@ -2223,7 +2255,12 @@ class PreprocessPage(ctk.CTkFrame):
             messagebox.showerror("Error", f"Could not stop process: {str(e)}")
             
     def on_show(self):
-        pass
+        if platform.system() not in ("Linux", "Windows"):
+            messagebox.showerror(
+                "Platform Not Supported",
+                "Dataset Preprocessing is only supported on Linux and Windows due to specialized satellite science and remote sensing library dependencies."
+            )
+            self.after(10, self.go_back)
 
     def go_back(self):
         self.controller.show_page("home")
