@@ -4,6 +4,7 @@ datasets/
 checkpoints/
 Guwahati_Azara_dataset/
 logs/
+build/
 results/
 results/
 build/

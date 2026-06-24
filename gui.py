@@ -17,8 +17,17 @@ import re
 ctk.set_appearance_mode("Light")
 ctk.set_default_color_theme("blue")
 
-# Modern Typography
-FONT_FAMILY = "Segoe UI"
+import platform
+
+# Detect system platform for typography fallbacks
+sys_name = platform.system()
+if sys_name == "Windows":
+    FONT_FAMILY = "Segoe UI"
+elif sys_name == "Darwin":
+    FONT_FAMILY = ".AppleSystemUIFont"
+else:
+    FONT_FAMILY = "Ubuntu"  # Linux fallback
+
 FONT_TITLE = (FONT_FAMILY, 28, "bold")
 FONT_SUBTITLE = (FONT_FAMILY, 13)
 FONT_HEADING = (FONT_FAMILY, 20, "bold")
@@ -247,7 +256,7 @@ class Pix2PixGUI(ctk.CTk):
             return
             
         cmd = [
-            "/home/sankhya/Python/bin/python3", "train.py",
+            sys.executable, "train.py",
             "--dataroot", run.get("dataroot") if run.get("dataroot") else "./datasets/guwahati_azara_processed",
             "--name", run.get("name"),
             "--model", run.get("model"),
