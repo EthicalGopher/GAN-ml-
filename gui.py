@@ -2371,6 +2371,52 @@ class TestModelPage(ctk.CTkFrame):
         )
         self.chk_train_mode.pack(anchor="w", padx=30, pady=(0, 15))
         
+        # Checkbox for enabling Super-Resolution Pipeline (200m -> 100m -> Colorization)
+        self.var_sr_pipeline = ctk.BooleanVar(value=False)
+        self.chk_sr_pipeline = ctk.CTkCheckBox(
+            controls_panel, 
+            text="Enable Super Resolution Pre-stage (200m -> 100m)", 
+            variable=self.var_sr_pipeline, 
+            font=(FONT_FAMILY, 11),
+            text_color="#475569",
+            command=self.toggle_sr_pipeline
+        )
+        self.chk_sr_pipeline.pack(anchor="w", padx=30, pady=(0, 5))
+        
+        # Frame for SR options
+        self.sr_frame = ctk.CTkFrame(controls_panel, fg_color="transparent")
+        self.sr_frame.pack(fill="x", padx=30, pady=(0, 15))
+        
+        self.btn_sr_browse = ctk.CTkButton(
+            self.sr_frame, 
+            text="📁 Load SRCNN Checkpoint (.pth)...", 
+            font=FONT_BUTTON, 
+            height=30, 
+            corner_radius=8, 
+            fg_color="#f1f5f9", 
+            text_color="#0f172a", 
+            hover_color="#e2e8f0", 
+            border_width=1, 
+            border_color="#cbd5e1",
+            command=self.browse_sr_checkpoint
+        )
+        self.btn_sr_browse.pack(fill="x", pady=2)
+        
+        self.lbl_sr_checkpoint = ctk.CTkLabel(
+            self.sr_frame, 
+            text="No SRCNN checkpoint loaded", 
+            font=(FONT_FAMILY, 10), 
+            text_color="#64748b", 
+            wraplength=400, 
+            justify="left"
+        )
+        self.lbl_sr_checkpoint.pack(anchor="w", pady=2)
+        
+        # Hide SR frame by default
+        self.sr_frame.pack_forget()
+        self.netSR = None
+        self.sr_checkpoint_path = None
+        
         # Run Button
         self.btn_predict = ctk.CTkButton(
             controls_panel, 
@@ -2396,7 +2442,8 @@ class TestModelPage(ctk.CTkFrame):
         ctk.CTkLabel(preview_panel, text="Inference Previews", font=(FONT_FAMILY, 14, "bold"), text_color="#0f172a").pack(pady=(15, 5))
         
         # 1. Input Image
-        ctk.CTkLabel(preview_panel, text="INPUT IMAGE (Thermal IR / Domain A)", font=(FONT_FAMILY, 10, "bold"), text_color="#475569").pack(pady=(5, 2))
+        self.lbl_in_title = ctk.CTkLabel(preview_panel, text="INPUT IMAGE (Thermal IR / Domain A)", font=(FONT_FAMILY, 10, "bold"), text_color="#475569")
+        self.lbl_in_title.pack(pady=(5, 2))
         self.frame_in = ctk.CTkFrame(preview_panel, width=220, height=220, corner_radius=8, fg_color="#f8fafc", border_width=1, border_color="#cbd5e1")
         self.frame_in.pack(pady=(0, 10))
         self.frame_in.pack_propagate(False)
@@ -2404,7 +2451,8 @@ class TestModelPage(ctk.CTkFrame):
         self.lbl_in.pack(fill="both", expand=True)
         
         # 2. Expected Target
-        ctk.CTkLabel(preview_panel, text="EXPECTED TARGET (Ground Truth RGB / Domain B)", font=(FONT_FAMILY, 10, "bold"), text_color="#475569").pack(pady=(5, 2))
+        self.lbl_tgt_title = ctk.CTkLabel(preview_panel, text="EXPECTED TARGET (Ground Truth RGB / Domain B)", font=(FONT_FAMILY, 10, "bold"), text_color="#475569")
+        self.lbl_tgt_title.pack(pady=(5, 2))
         self.frame_tgt = ctk.CTkFrame(preview_panel, width=220, height=220, corner_radius=8, fg_color="#f8fafc", border_width=1, border_color="#cbd5e1")
         self.frame_tgt.pack(pady=(0, 10))
         self.frame_tgt.pack_propagate(False)
@@ -2412,7 +2460,8 @@ class TestModelPage(ctk.CTkFrame):
         self.lbl_tgt.pack(fill="both", expand=True)
         
         # 3. Model Output
-        ctk.CTkLabel(preview_panel, text="MODEL PREDICTION (Generated RGB / Fake B)", font=(FONT_FAMILY, 10, "bold"), text_color="#475569").pack(pady=(5, 2))
+        self.lbl_out_title = ctk.CTkLabel(preview_panel, text="MODEL PREDICTION (Generated RGB / Fake B)", font=(FONT_FAMILY, 10, "bold"), text_color="#475569")
+        self.lbl_out_title.pack(pady=(5, 2))
         self.frame_out = ctk.CTkFrame(preview_panel, width=220, height=220, corner_radius=8, fg_color="#f8fafc", border_width=1, border_color="#cbd5e1")
         self.frame_out.pack(pady=(0, 15))
         self.frame_out.pack_propagate(False)
@@ -2543,6 +2592,92 @@ class TestModelPage(ctk.CTkFrame):
             self.lbl_status.configure(text="Status: Failed to load", text_color="#ef4444")
             messagebox.showerror("Error", f"Failed to load checkpoint: {str(e)}")
             
+    def toggle_sr_pipeline(self):
+        if self.var_sr_pipeline.get():
+            self.sr_frame.pack(fill="x", padx=30, pady=(0, 15))
+            self.lbl_in_title.configure(text="INPUT IMAGE (B10 @200m / Simulated)")
+            self.lbl_tgt_title.configure(text="SUPER-RESOLVED B10 (@100m)")
+            if self.cached_input_img:
+                self.simulate_low_res_input()
+        else:
+            self.sr_frame.pack_forget()
+            self.lbl_in_title.configure(text="INPUT IMAGE (Thermal IR / Domain A)")
+            self.lbl_tgt_title.configure(text="EXPECTED TARGET (Ground Truth RGB / Domain B)")
+            self.reload_original_image()
+
+    def browse_sr_checkpoint(self):
+        file_path = filedialog.askopenfilename(
+            filetypes=[
+                ("PyTorch Weight Files", "*.pth"),
+                ("All Files", "*.*")
+            ]
+        )
+        if not file_path:
+            return
+            
+        self.sr_checkpoint_path = file_path
+        self.lbl_sr_checkpoint.configure(text=f"Selected: {Path(file_path).name}")
+        
+        try:
+            from models.sr_model import SRCNN
+            import torch
+            
+            # Initialize 1-channel model (since B10 thermal is grayscale)
+            self.netSR = SRCNN(num_channels=1)
+            device = getattr(self, "device", torch.device("cpu"))
+            
+            state_dict = torch.load(file_path, map_location=device)
+            self.netSR.load_state_dict(state_dict)
+            self.netSR.to(device)
+            self.netSR.eval()
+            
+            self.lbl_status.configure(text="Status: SRCNN checkpoint loaded successfully!", text_color="#10b981")
+        except Exception as e:
+            traceback.print_exc()
+            self.lbl_status.configure(text="Status: Failed to load SRCNN", text_color="#ef4444")
+            messagebox.showerror("Error", f"Failed to load SRCNN checkpoint: {str(e)}")
+
+    def simulate_low_res_input(self):
+        if not self.cached_input_img:
+            return
+        # Simulate low-res B10 @200m by downsampling 2x (e.g. from 256x256 to 128x128)
+        w, h = self.cached_input_img.size
+        lr_size = (w // 2, h // 2)
+        # Store the simulated low-res B10 @200m
+        self.simulated_lr_img = self.cached_input_img.resize(lr_size, Image.Resampling.BICUBIC)
+        
+        # Display simulated low-res in the Input Preview
+        ctk_in = ctk.CTkImage(light_image=self.simulated_lr_img, size=(220, 220))
+        self.lbl_in.configure(image=ctk_in, text="")
+        self.lbl_in.image = ctk_in
+        
+        # Clear Expected Target preview and show instructions
+        self.lbl_tgt.configure(image=None, text="Click 'Run Prediction' to generate\nSuper-Resolved B10 (@100m)", text_color="#94a3b8")
+
+    def reload_original_image(self):
+        if not self.selected_img_path:
+            return
+        try:
+            img = Image.open(self.selected_img_path).convert("RGB")
+            w, h = img.size
+            if w == h * 2:
+                w2 = h
+                self.cached_input_img = img.crop((0, 0, w2, h))
+                self.cached_target_img = img.crop((w2, 0, w, h))
+                ctk_tgt = ctk.CTkImage(light_image=self.cached_target_img, size=(220, 220))
+                self.lbl_tgt.configure(image=ctk_tgt, text="")
+                self.lbl_tgt.image = ctk_tgt
+            else:
+                self.cached_input_img = img
+                self.cached_target_img = None
+                self.lbl_tgt.configure(image=None, text="Ground Truth not available\n(Single-channel input)", text_color="#94a3b8")
+                
+            ctk_in = ctk.CTkImage(light_image=self.cached_input_img, size=(220, 220))
+            self.lbl_in.configure(image=ctk_in, text="")
+            self.lbl_in.image = ctk_in
+        except Exception as e:
+            pass
+
     def browse_image(self):
         file_path = filedialog.askopenfilename(
             filetypes=[
@@ -2579,10 +2714,14 @@ class TestModelPage(ctk.CTkFrame):
                 # Reset expected target preview
                 self.lbl_tgt.configure(image=None, text="Ground Truth not available\n(Single-channel input)", text_color="#94a3b8")
                 
-            # Update input preview
-            ctk_in = ctk.CTkImage(light_image=self.cached_input_img, size=(220, 220))
-            self.lbl_in.configure(image=ctk_in, text="")
-            self.lbl_in.image = ctk_in
+            # If SR pipeline is enabled, simulate low-res input
+            if self.var_sr_pipeline.get():
+                self.simulate_low_res_input()
+            else:
+                # Update input preview
+                ctk_in = ctk.CTkImage(light_image=self.cached_input_img, size=(220, 220))
+                self.lbl_in.configure(image=ctk_in, text="")
+                self.lbl_in.image = ctk_in
             
             # Reset prediction preview
             self.lbl_out.configure(image=None, text="Prediction pending", text_color="#94a3b8")
@@ -2593,7 +2732,11 @@ class TestModelPage(ctk.CTkFrame):
             messagebox.showerror("Error", f"Failed to open image file: {e}")
             
     def run_prediction(self):
-        if not self.netG or not self.cached_input_img:
+        if not self.netG:
+            messagebox.showerror("Error", "Please load a generator checkpoint first.")
+            return
+        if not self.cached_input_img:
+            messagebox.showerror("Error", "Please select an input image first.")
             return
             
         try:
@@ -2604,7 +2747,55 @@ class TestModelPage(ctk.CTkFrame):
             import numpy as np
             import torchvision.transforms as transforms
             
-            # Setup transform to match input preprocessing in BaseDataset
+            device = getattr(self, "device", torch.device("cpu"))
+            
+            # 1. Check if Super Resolution pre-stage is active
+            if self.var_sr_pipeline.get():
+                if not self.netSR:
+                    messagebox.showerror("SRCNN Required", "Please load an SRCNN checkpoint (.pth) before running the pipeline.")
+                    self.lbl_status.configure(text="Status: SRCNN required", text_color="#ef4444")
+                    return
+                
+                # Check if simulated_lr_img exists
+                if not hasattr(self, 'simulated_lr_img') or not self.simulated_lr_img:
+                    self.simulate_low_res_input()
+                    
+                # Standard input preparation for SRCNN (which runs on 1-channel grayscale)
+                lr_gray = self.simulated_lr_img.convert("L")
+                
+                # SRCNN takes an image upscaled back to target size using Bicubic interpolation
+                # Target size is 256x256
+                lr_gray_upscaled = lr_gray.resize((256, 256), Image.Resampling.BICUBIC)
+                
+                # Convert to tensor and send to device
+                sr_transform = transforms.ToTensor()
+                sr_input_tensor = sr_transform(lr_gray_upscaled).unsqueeze(0).to(device)
+                
+                # Run Super Resolution Model
+                self.netSR.eval()
+                with torch.no_grad():
+                    sr_output_tensor = self.netSR(sr_input_tensor)
+                    
+                # Post-process SR CNN output to PIL image
+                sr_output_tensor = sr_output_tensor.clamp(0, 1).squeeze(0).cpu()
+                sr_numpy = (sr_output_tensor.numpy()[0] * 255.0).astype(np.uint8)
+                sr_pil_gray = Image.fromarray(sr_numpy)
+                
+                # Convert back to 3-channel RGB image for Pix2Pix model
+                self.super_resolved_img = sr_pil_gray.convert("RGB")
+                
+                # Update expected target preview (repurposed to show the SR B10 intermediate image)
+                ctk_tgt = ctk.CTkImage(light_image=self.super_resolved_img, size=(220, 220))
+                self.lbl_tgt.configure(image=ctk_tgt, text="")
+                self.lbl_tgt.image = ctk_tgt
+                
+                # Input to Pix2Pix is now the super-resolved B10 image
+                pix_input_img = self.super_resolved_img
+            else:
+                # Direct mode: input to Pix2Pix is the cached original input image
+                pix_input_img = self.cached_input_img
+            
+            # Setup transform to match input preprocessing in BaseDataset for Pix2Pix
             transform = transforms.Compose([
                 transforms.Resize((256, 256), interpolation=transforms.InterpolationMode.BICUBIC),
                 transforms.ToTensor(),
@@ -2612,15 +2803,14 @@ class TestModelPage(ctk.CTkFrame):
             ])
             
             # Route input tensor to the loaded device (GPU/CPU)
-            device = getattr(self, "device", torch.device("cpu"))
-            input_tensor = transform(self.cached_input_img).unsqueeze(0).to(device)
+            input_tensor = transform(pix_input_img).unsqueeze(0).to(device)
             
             # Run prediction
             if hasattr(self, 'var_train_mode') and self.var_train_mode.get():
                 self.netG.train()
             else:
                 self.netG.eval()
-
+                
             with torch.no_grad():
                 output_tensor = self.netG(input_tensor)
                 
