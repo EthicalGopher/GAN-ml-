@@ -2,12 +2,14 @@
 debug*
 datasets/
 checkpoints/
+database.db
 Guwahati_Azara_dataset/
 logs/
 build/
 results/
 results/
 build/
+.replit
 dist/
 *.png
 torch.egg-info/
