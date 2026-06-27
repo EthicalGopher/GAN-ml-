@@ -138,7 +138,7 @@ class Pix2PixGUI(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.title("Pix2Pix Control Center")
+        self.title("Vision-X Dashboard")
         self.geometry("1180x920")
         self.resizable(True, True)
         self.configure(fg_color="#fcfdfe")
@@ -683,7 +683,7 @@ class HomePage(ctk.CTkFrame):
         self.badge_lbl = ctk.CTkLabel(self.badge, text=" PLATFORM WORKSPACE ", font=(FONT_FAMILY, 9, "bold"), text_color="#1a73e8")
         self.badge_lbl.pack(padx=8, pady=1)
 
-        self.title_label = ctk.CTkLabel(self.header_frame, text="Pix2Pix Dashboard", font=FONT_TITLE, text_color="#1e293b")
+        self.title_label = ctk.CTkLabel(self.header_frame, text="Vision-X Dashboard", font=FONT_TITLE, text_color="#1e293b")
         self.title_label.pack(anchor="w", pady=(8, 2))
         self.subtitle_label = ctk.CTkLabel(self.header_frame, text="Select an action to launch, configure, or review your model parameters.", font=FONT_SUBTITLE, text_color="#64748b")
         self.subtitle_label.pack(anchor="w")

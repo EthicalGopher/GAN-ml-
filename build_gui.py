@@ -4,7 +4,7 @@ import subprocess
 import shutil
 
 def main():
-    print("Preparing to build standalone executable for Pix2Pix GUI...")
+    print("Preparing to build standalone executable for Vision-X Dashboard...")
     
     # Check if pyinstaller is installed
     try:
@@ -28,7 +28,7 @@ def main():
     # --noconsole / --windowed runs without opening a terminal window
     args = [
         'gui.py',
-        '--name=Pix2Pix_GUI',
+        '--name=Vision-X_Dashboard',
         '--onefile',
         '--windowed',
         f'--add-data={ctk_path}{sep}customtkinter',
@@ -42,7 +42,7 @@ def main():
         
         # Output info
         output_dir = os.path.abspath('dist')
-        executable_name = "Pix2Pix_GUI.exe" if sys.platform.startswith('win') else "Pix2Pix_GUI"
+        executable_name = "Vision-X_Dashboard.exe" if sys.platform.startswith('win') else "Vision-X_Dashboard"
         executable_path = os.path.join(output_dir, executable_name)
         print(f"\nStandalone executable is located at:\n{executable_path}\n")
     except Exception as e:
