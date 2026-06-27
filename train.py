@@ -75,7 +75,7 @@ if __name__ == "__main__":
 
             iter_data_time = time.time()
 
-        model.update_learning_rate()  # update learning rates at the end of every epoch
+        model.update_learning_rate()  
 
         if epoch % opt.save_epoch_freq == 0:  # cache our model every <save_epoch_freq> epochs
             print(f"saving the model at the end of epoch {epoch}, iters {total_iters}")
