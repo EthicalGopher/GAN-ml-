@@ -12,6 +12,40 @@ Please check out [contrastive-unpaired-translation](https://github.com/taesungp/
 
 We provide PyTorch implementations for both unpaired and paired image-to-image translation.
 
+## 🖥️ Vision-X Dashboard
+
+This project includes a modern, interactive CustomTkinter-based GUI called **Vision-X Dashboard** (located in [gui.py](file:///home/sankhya/Coding/Python/GAN-ml-/gui.py)) that lets you manage your model workflows, satellite datasets, and training logs easily without typing command-line flags.
+
+<img src="assets/train.jpg" width="800px" alt="Vision-X Dashboard"/>
+
+### Core Features
+*   **Train New Model:** Configure parameters (batch size, epochs, decay, learning rate, GPU IDs, WandB logging) and start a new training run.
+*   **Fine-tune Checkpoint:** Select a pre-trained epoch checkpoint to resume training or fine-tune on new datasets.
+*   **Monitoring & Real-time Logs:** Watch the training logs stream live, check GPU utilization, and view loss statistics.
+*   **Model Storage Explorer:** Browse the `checkpoints/` directory, review weight files, and manage your storage workspace.
+*   **Dataset Preprocessing:** Formatted specifically for satellite scene remote-sensing data (such as the Guwahati Azara dataset). You can load, tile, and prepare raw datasets for image-to-image translation.
+*   **Interactive Model Tester:** Load arbitrary epoch checkpoints, choose test images, perform visual inference directly in the GUI, and view input vs. target vs. prediction side-by-side.
+*   **Local Run History:** Tracks your past training runs and their statuses locally in [database.db](file:///home/sankhya/Coding/Python/GAN-ml-/database.db) using SQLite.
+
+### Running the Dashboard
+To start the GUI:
+```bash
+./start_gui.sh
+```
+*(This shell script launches [gui.py](file:///home/sankhya/Coding/Python/GAN-ml-/gui.py) using the configured python environment).*
+
+### Building a Standalone Executable
+You can bundle the Python scripts, CustomTkinter assets, PyTorch, and all dependencies into a single, standalone binary executable (which does not require a pre-installed Python interpreter or PyTorch on the target system):
+
+1. Run the build script:
+   ```bash
+   python build_gui.py
+   ```
+2. Once the build completes successfully, the compiled binary will be placed in the `dist/` directory:
+   *   **On Linux:** `dist/Vision-X_Dashboard` (native ELF binary)
+   *   **On Windows:** `dist/Vision-X_Dashboard.exe` (Windows executable, must be built on a Windows machine)
+
+
 The code was written by [Jun-Yan Zhu](https://github.com/junyanz) and [Taesung Park](https://github.com/taesungp), and supported by [Tongzhou Wang](https://github.com/SsnL).
 
 This PyTorch implementation produces results comparable to or better than our original Torch software. If you would like to reproduce the same results as in the papers, check out the original [CycleGAN Torch](https://github.com/junyanz/CycleGAN) and [pix2pix Torch](https://github.com/phillipi/pix2pix) code in Lua/Torch.
