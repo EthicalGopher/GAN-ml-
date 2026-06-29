@@ -1,342 +1,162 @@
-<img src='imgs/horse2zebra.gif' align="right" width=384>
+# Vision-X & GAN Remote-Sensing Platform: Developer Guide
 
-<br><br><br>
+This repository contains a full-featured PyTorch machine learning codebase for paired and unpaired image-to-image translation (Pix2Pix and CycleGAN) tailored for satellite remote-sensing tasks (such as the Guwahati Azara dataset). It includes a database-driven graphical user interface called the **Vision-X Dashboard** for managing training pipelines, data preprocessing, log streaming, and interactive testing.
 
-# CycleGAN and pix2pix in PyTorch
+---
 
-**Udpate in 2025**: we recently updated the code to support Python 3.11 and PyTorch 2.4. It also supports DDP for single-machine multiple-GPU training. (Please use `torchrun --nproc_per_node=4 train.py ...`)
+## Table of Contents
+1. [Core Architecture & File Structure](#1-core-architecture--file-structure)
+2. [Environment Setup & Installation](#2-environment-setup--file-structure)
+3. [Vision-X Dashboard GUI Manual](#3-vision-x-dashboard-gui-manual)
+4. [Training Run Database Schema](#4-training-run-database-schema)
+5. [Command-Line Interface CLI](#5-command-line-interface-cli)
+6. [Standalone Binary Compilation](#6-standalone-binary-compilation)
+7. [Automated Scripts Directory](#7-automated-scripts-directory)
 
-**New**: Please check out [img2img-turbo](https://github.com/GaParmar/img2img-turbo) repo that includes both pix2pix-turbo and CycleGAN-Turbo. Our new one-step image-to-image translation methods can support both paired and unpaired training and produce better results by leveraging the pre-trained StableDiffusion-Turbo model. The inference time for 512x512 image is 0.29 sec on A6000 and 0.11 sec on A100.
+---
 
-Please check out [contrastive-unpaired-translation](https://github.com/taesungp/contrastive-unpaired-translation) (CUT), our new unpaired image-to-image translation model that enables fast and memory-efficient training.
+## 1. Core Architecture & File Structure
 
-We provide PyTorch implementations for both unpaired and paired image-to-image translation.
+The project is structured modularly. The main application files and folders are defined below:
 
-## 🖥️ Vision-X Dashboard
+*   **Main Application Controllers:**
+    *   [gui.py](file:///home/sankhya/Coding/Python/GAN-ml-/gui.py): Main entrypoint and layout for the CustomTkinter GUI dashboard.
+    *   [build_gui.py](file:///home/sankhya/Coding/Python/GAN-ml-/build_gui.py): Packages the GUI, including CustomTkinter themes and DLLs/assets, into a single executable binary.
+    *   [start_gui.sh](file:///home/sankhya/Coding/Python/GAN-ml-/start_gui.sh): Helper shell script to launch the GUI using the pre-configured Python interpreter.
+    *   [train.py](file:///home/sankhya/Coding/Python/GAN-ml-/train.py): CLI training entrypoint for training GAN models.
+    *   [test.py](file:///home/sankhya/Coding/Python/GAN-ml-/test.py): CLI testing/inference entrypoint for GAN models.
+    *   [database.db](file:///home/sankhya/Coding/Python/GAN-ml-/database.db): Local SQLite database managing training history and progress logs.
 
-This project includes a modern, interactive CustomTkinter-based GUI called **Vision-X Dashboard** (located in [gui.py](file:///home/sankhya/Coding/Python/GAN-ml-/gui.py)) that lets you manage your model workflows, satellite datasets, and training logs easily without typing command-line flags.
+*   **Submodules:**
+    *   [models/](file:///home/sankhya/Coding/Python/GAN-ml-/models): Architecture specifications, optimization routines, and neural network generator/discriminator models.
+        *   `base_model.py`: Abstract class defining common workflows (saving, loading, forward passes).
+        *   `pix2pix_model.py`: Paired conditional GAN model implementation.
+        *   `cycle_gan_model.py`: Unpaired cycle-consistent GAN model implementation.
+        *   `networks.py`: Network building blocks (ResNet, U-Net, PatchGAN discriminator, loss configurations).
+    *   [data/](file:///home/sankhya/Coding/Python/GAN-ml-/data): Dataset managers and image loading pipelines.
+        *   `base_dataset.py`: Abstract dataset base class.
+        *   `aligned_dataset.py`: Loads paired (A and B aligned side-by-side) images for Pix2Pix.
+        *   `unaligned_dataset.py`: Loads unpaired images for CycleGAN.
+        *   `image_folder.py`: Internal helpers to query images from directories.
+    *   [options/](file:///home/sankhya/Coding/Python/GAN-ml-/options): Settings and arguments parser.
+        *   `base_options.py`: Shared parameters (dataroot, model, batch size, network sizes).
+        *   `train_options.py`: Specific parameters for training (epochs, learning rates, decay scheduling).
+        *   `test_options.py`: Specific parameters for inference and evaluation.
+    *   [util/](file:///home/sankhya/Coding/Python/GAN-ml-/util): Helper utilities for visualizations, logging, database queries, and HTML reporting.
 
-<img src="assets/train.jpg" width="800px" alt="Vision-X Dashboard"/>
+---
 
-### Core Features
-*   **Train New Model:** Configure parameters (batch size, epochs, decay, learning rate, GPU IDs, WandB logging) and start a new training run.
-*   **Fine-tune Checkpoint:** Select a pre-trained epoch checkpoint to resume training or fine-tune on new datasets.
-*   **Monitoring & Real-time Logs:** Watch the training logs stream live, check GPU utilization, and view loss statistics.
-*   **Model Storage Explorer:** Browse the `checkpoints/` directory, review weight files, and manage your storage workspace.
-*   **Dataset Preprocessing:** Formatted specifically for satellite scene remote-sensing data (such as the Guwahati Azara dataset). You can load, tile, and prepare raw datasets for image-to-image translation.
-*   **Interactive Model Tester:** Load arbitrary epoch checkpoints, choose test images, perform visual inference directly in the GUI, and view input vs. target vs. prediction side-by-side.
-*   **Local Run History:** Tracks your past training runs and their statuses locally in [database.db](file:///home/sankhya/Coding/Python/GAN-ml-/database.db) using SQLite.
+## 2. Environment Setup & Installation
 
-### Running the Dashboard
-To start the GUI:
-```bash
-./start_gui.sh
-```
-*(This shell script launches [gui.py](file:///home/sankhya/Coding/Python/GAN-ml-/gui.py) using the configured python environment).*
+You can set up your environment by compiling dependencies using Conda or standard Pip environments.
 
-### Building a Standalone Executable
-You can bundle the Python scripts, CustomTkinter assets, PyTorch, and all dependencies into a single, standalone binary executable (which does not require a pre-installed Python interpreter or PyTorch on the target system):
-
-1. Run the build script:
-   ```bash
-   python build_gui.py
-   ```
-2. Once the build completes successfully, the compiled binary will be placed in the `dist/` directory:
-   *   **On Linux:** `dist/Vision-X_Dashboard` (native ELF binary)
-   *   **On Windows:** `dist/Vision-X_Dashboard.exe` (Windows executable, must be built on a Windows machine)
-
-
-The code was written by [Jun-Yan Zhu](https://github.com/junyanz) and [Taesung Park](https://github.com/taesungp), and supported by [Tongzhou Wang](https://github.com/SsnL).
-
-This PyTorch implementation produces results comparable to or better than our original Torch software. If you would like to reproduce the same results as in the papers, check out the original [CycleGAN Torch](https://github.com/junyanz/CycleGAN) and [pix2pix Torch](https://github.com/phillipi/pix2pix) code in Lua/Torch.
-
-**Note**: The current software works well with PyTorch 2.4+. Check out the older [branch](https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/tree/pytorch0.3.1) that supports PyTorch 0.1-0.3.
-
-You may find useful information in [training/test tips](docs/tips.md) and [frequently asked questions](docs/qa.md). To implement custom models and datasets, check out our [templates](#custom-model-and-dataset). To help users better understand and adapt our codebase, we provide an [overview](docs/overview.md) of the code structure of this repository.
-
-**CycleGAN: [Project](https://junyanz.github.io/CycleGAN/) | [Paper](https://arxiv.org/pdf/1703.10593.pdf) | [Torch](https://github.com/junyanz/CycleGAN) |
-[Tensorflow Core Tutorial](https://www.tensorflow.org/tutorials/generative/cyclegan) | [PyTorch Colab](https://colab.research.google.com/github/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/CycleGAN.ipynb)**
-
-<img src="https://junyanz.github.io/CycleGAN/images/teaser_high_res.jpg" width="800"/>
-
-**Pix2pix: [Project](https://phillipi.github.io/pix2pix/) | [Paper](https://arxiv.org/pdf/1611.07004.pdf) | [Torch](https://github.com/phillipi/pix2pix) |
-[Tensorflow Core Tutorial](https://www.tensorflow.org/tutorials/generative/pix2pix) | [PyTorch Colab](https://colab.research.google.com/github/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/pix2pix.ipynb)**
-
-<img src="https://phillipi.github.io/pix2pix/images/teaser_v3.png" width="800px"/>
-
-**[EdgesCats Demo](https://affinelayer.com/pixsrv/) | [pix2pix-tensorflow](https://github.com/affinelayer/pix2pix-tensorflow) | by [Christopher Hesse](https://twitter.com/christophrhesse)**
-
-<img src='imgs/edges2cats.jpg' width="400px"/>
-
-If you use this code for your research, please cite:
-
-Unpaired Image-to-Image Translation using Cycle-Consistent Adversarial Networks.<br>
-[Jun-Yan Zhu](https://www.cs.cmu.edu/~junyanz/)\*, [Taesung Park](https://taesung.me/)\*, [Phillip Isola](https://people.eecs.berkeley.edu/~isola/), [Alexei A. Efros](https://people.eecs.berkeley.edu/~efros). In ICCV 2017. (\* equal contributions) [[Bibtex]](https://junyanz.github.io/CycleGAN/CycleGAN.txt)
-
-Image-to-Image Translation with Conditional Adversarial Networks.<br>
-[Phillip Isola](https://people.eecs.berkeley.edu/~isola), [Jun-Yan Zhu](https://www.cs.cmu.edu/~junyanz/), [Tinghui Zhou](https://people.eecs.berkeley.edu/~tinghuiz), [Alexei A. Efros](https://people.eecs.berkeley.edu/~efros). In CVPR 2017. [[Bibtex]](https://www.cs.cmu.edu/~junyanz/projects/pix2pix/pix2pix.bib)
-
-## Talks and Course
-
-pix2pix slides: [keynote](http://efrosgans.eecs.berkeley.edu/CVPR18_slides/pix2pix.key) | [pdf](http://efrosgans.eecs.berkeley.edu/CVPR18_slides/pix2pix.pdf),
-CycleGAN slides: [pptx](http://efrosgans.eecs.berkeley.edu/CVPR18_slides/CycleGAN.pptx) | [pdf](http://efrosgans.eecs.berkeley.edu/CVPR18_slides/CycleGAN.pdf)
-
-CycleGAN course assignment [code](http://www.cs.toronto.edu/~rgrosse/courses/csc321_2018/assignments/a4-code.zip) and [handout](http://www.cs.toronto.edu/~rgrosse/courses/csc321_2018/assignments/a4-handout.pdf) designed by Prof. [Roger Grosse](http://www.cs.toronto.edu/~rgrosse/) for [CSC321](http://www.cs.toronto.edu/~rgrosse/courses/csc321_2018/) "Intro to Neural Networks and Machine Learning" at University of Toronto. Please contact the instructor if you would like to adopt it in your course.
-
-## Colab Notebook
-
-TensorFlow Core CycleGAN Tutorial: [Google Colab](https://colab.research.google.com/github/tensorflow/docs/blob/master/site/en/tutorials/generative/cyclegan.ipynb) | [Code](https://github.com/tensorflow/docs/blob/master/site/en/tutorials/generative/cyclegan.ipynb)
-
-TensorFlow Core pix2pix Tutorial: [Google Colab](https://colab.research.google.com/github/tensorflow/docs/blob/master/site/en/tutorials/generative/pix2pix.ipynb) | [Code](https://github.com/tensorflow/docs/blob/master/site/en/tutorials/generative/pix2pix.ipynb)
-
-PyTorch Colab notebook: [CycleGAN](https://colab.research.google.com/github/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/CycleGAN.ipynb) and [pix2pix](https://colab.research.google.com/github/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/pix2pix.ipynb)
-
-ZeroCostDL4Mic Colab notebook: [CycleGAN](https://colab.research.google.com/github/HenriquesLab/ZeroCostDL4Mic/blob/master/Colab_notebooks_Beta/CycleGAN_ZeroCostDL4Mic.ipynb) and [pix2pix](https://colab.research.google.com/github/HenriquesLab/ZeroCostDL4Mic/blob/master/Colab_notebooks_Beta/pix2pix_ZeroCostDL4Mic.ipynb)
-
-## Other implementations
-
-### CycleGAN
-
-<p><a href="https://github.com/leehomyc/cyclegan-1"> [Tensorflow]</a> (by Harry Yang),
-<a href="https://github.com/architrathore/CycleGAN/">[Tensorflow]</a> (by Archit Rathore),
-<a href="https://github.com/vanhuyz/CycleGAN-TensorFlow">[Tensorflow]</a> (by Van Huy),
-<a href="https://github.com/XHUJOY/CycleGAN-tensorflow">[Tensorflow]</a> (by Xiaowei Hu),
-<a href="https://github.com/LynnHo/CycleGAN-Tensorflow-2"> [Tensorflow2]</a> (by Zhenliang He),
-<a href="https://github.com/luoxier/CycleGAN_Tensorlayer"> [TensorLayer1.0]</a> (by luoxier),
-<a href="https://github.com/tensorlayer/cyclegan"> [TensorLayer2.0]</a> (by zsdonghao),
-<a href="https://github.com/Aixile/chainer-cyclegan">[Chainer]</a> (by Yanghua Jin),
-<a href="https://github.com/yunjey/mnist-svhn-transfer">[Minimal PyTorch]</a> (by yunjey),
-<a href="https://github.com/Ldpe2G/DeepLearningForFun/tree/master/Mxnet-Scala/CycleGAN">[Mxnet]</a> (by Ldpe2G),
-<a href="https://github.com/tjwei/GANotebooks">[lasagne/Keras]</a> (by tjwei),
-<a href="https://github.com/simontomaskarlsson/CycleGAN-Keras">[Keras]</a> (by Simon Karlsson),
-<a href="https://github.com/Ldpe2G/DeepLearningForFun/tree/master/Oneflow-Python/CycleGAN">[OneFlow]</a> (by Ldpe2G)
-</p>
-</ul>
-
-### pix2pix
-
-<p><a href="https://github.com/affinelayer/pix2pix-tensorflow"> [Tensorflow]</a> (by Christopher Hesse),
-<a href="https://github.com/Eyyub/tensorflow-pix2pix">[Tensorflow]</a> (by Eyyüb Sariu),
-<a href="https://github.com/datitran/face2face-demo"> [Tensorflow (face2face)]</a> (by Dat Tran),
-<a href="https://github.com/awjuliani/Pix2Pix-Film"> [Tensorflow (film)]</a> (by Arthur Juliani),
-<a href="https://github.com/kaonashi-tyc/zi2zi">[Tensorflow (zi2zi)]</a> (by Yuchen Tian),
-<a href="https://github.com/pfnet-research/chainer-pix2pix">[Chainer]</a> (by mattya),
-<a href="https://github.com/tjwei/GANotebooks">[tf/torch/keras/lasagne]</a> (by tjwei),
-<a href="https://github.com/taey16/pix2pixBEGAN.pytorch">[Pytorch]</a> (by taey16)
-</p>
-</ul>
-
-## Prerequisites
-
-- Linux or macOS
-- Python 3
-- CPU or NVIDIA GPU + CUDA CuDNN
-
-## Getting Started
-
-### Installation
-
-- Clone this repo:
-
-```bash
-git clone https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix
-cd pytorch-CycleGAN-and-pix2pix
-```
-
-- Install [PyTorch](http://pytorch.org) and other dependencies. For Conda users, you can create a new Conda environment by
-
+### Conda Setup
+An environment file [environment.yml](file:///home/sankhya/Coding/Python/GAN-ml-/environment.yml) is included:
 ```bash
 conda env create -f environment.yml
-```
-
-and then activate the environment by
-
-```bash
 conda activate pytorch-img2img
 ```
 
-- For Docker users, we provide the pre-built Docker image and Dockerfile. Please refer to our [Docker](docs/docker.md) page.
-- For Repl users, please click [![Run on Repl.it](https://repl.it/badge/github/junyanz/pytorch-CycleGAN-and-pix2pix)](https://repl.it/github/junyanz/pytorch-CycleGAN-and-pix2pix).
-
-### CycleGAN train/test
-
-- Download a CycleGAN dataset (e.g. maps):
-
+### Manual Dependency Installation
+To install the necessary python packages manually:
 ```bash
-bash ./datasets/download_cyclegan_dataset.sh maps
+pip install torch torchvision torchaudio
+pip install customtkinter pillow sqlite3
+pip install visdom dominate wandb
 ```
 
-- To log training progress and test images to W&B dashboard, set the `--use_wandb` flag with training script
-- Train a model:
+---
 
+## 3. Vision-X Dashboard GUI Manual
+
+The dashboard provides a mouse-controlled frontend for all deep learning workflows:
+
+1.  **Dashboard Home Page:** Displays overall system status (e.g., active GPUs, CPU tracking) and presents cards to launch individual workflow modules.
+2.  **Train New Model:** Allows visual configuration of dataset root, learning rate, decay epochs, batch size, model framework (Pix2Pix or CycleGAN), and WandB integration. Clicking run executes `train.py` asynchronously.
+3.  **Fine-tune Checkpoint:** Allows you to load previous weights, specify a parent run, and continue training from where you left off.
+4.  **Monitoring & Real-time Logs:** Connects to the SQLite tracking database and shows active subprocess outputs. Logs stream directly inside the GUI.
+5.  **Model Storage Explorer:** Opens a workspace window displaying checkpoints, listing individual `.pth` generator/discriminator files, and showing their disk size.
+6.  **Dataset Preprocessing:** Focuses on satellite scene remote-sensing data (like the Guwahati Azara dataset). Allows cropping, tiling, and aligning satellite channels into model-ready paired images.
+7.  **Interactive Model Tester:** Enables visual testing. Load a trained generator weight (`.pth`), select a local input image, and immediately run a prediction to view input vs. prediction maps side-by-side.
+
+---
+
+## 4. Training Run Database Schema
+
+The dashboard tracks background training tasks using a SQLite database [database.db](file:///home/sankhya/Coding/Python/GAN-ml-/database.db). This ensures run data is not lost if the GUI is restarted.
+
+### Table: `training_runs`
+*   `id`: Primary integer key (auto-incrementing).
+*   `name`: Label assigned to the training run.
+*   `model`: GAN type (`pix2pix`, `cycle_gan`).
+*   `direction`: Translation direction (`AtoB`, `BtoA`).
+*   `netG`: Generator architecture layout (e.g., `unet_256`, `resnet_9blocks`).
+*   `dataset_mode`: Dataset pairing type (`aligned`, `unaligned`).
+*   `norm`: Normalization strategy (`batch`, `instance`, etc.).
+*   `batch_size`: Batch size integer.
+*   `n_epochs`: Standard learning rate epoch count.
+*   `n_epochs_decay`: Linearly decaying learning rate epoch count.
+*   `dataroot`: Directory path where datasets are located.
+*   `gpu_ids`: Device ids allocated for training (e.g., `0`, `0,1`).
+*   `use_wandb`: Flag (0 or 1) indicating weights & biases logging status.
+*   `epoch_count`: Active epoch marker.
+*   `status`: Operational state (`pending`, `running`, `completed`, `failed`).
+*   `pid`: Process ID of the asynchronous python backend command.
+*   `created_at`: Datetime stamp of initialization.
+*   `completed_at`: Datetime stamp of process termination.
+*   `log_file`: Relative file path to the standard output file.
+*   `is_finetuning`: Checkbox flag for resumed training tasks.
+*   `parent_run_id`: DB identifier of the model source run (if fine-tuning).
+*   `parent_epoch`: Epoch loaded from the source model.
+
+---
+
+## 5. Command-Line Interface CLI
+
+For users who prefer operating via the terminal, the Python files can be invoked directly:
+
+### Training Options
+Run `train.py` with standard flags:
 ```bash
-#!./scripts/train_cyclegan.sh
-python train.py --dataroot ./datasets/maps --name maps_cyclegan --model cycle_gan --use_wandb
+python train.py --dataroot ./datasets/guwahati_azara_processed --name satellite_run --model pix2pix --direction AtoB --gpu_ids 0
 ```
+Key Flags:
+*   `--dataroot`: Directory path to the target image dataset.
+*   `--model`: Model type (`pix2pix`, `cycle_gan`, `test`).
+*   `--netG`: Generator architecture (`unet_128`, `unet_256`, `resnet_9blocks`).
+*   `--gpu_ids`: CUDA device configuration (use `-1` for CPU training).
+*   `--use_wandb`: Enable online monitoring logging.
 
-To see more intermediate results, check out `./checkpoints/maps_cyclegan/web/index.html`.
-
-- Test the model:
-
+### Testing Options
+Run `test.py` to evaluate validation datasets:
 ```bash
-#!./scripts/test_cyclegan.sh
-python test.py --dataroot ./datasets/maps --name maps_cyclegan --model cycle_gan
+python test.py --dataroot ./datasets/guwahati_azara_processed/test --name satellite_run --model pix2pix --direction AtoB
 ```
+Results will save automatically to `./results/{name}/latest_test/`.
 
-- The test results will be saved to a html file here: `./results/maps_cyclegan/latest_test/index.html`.
+---
 
-### pix2pix train/test
+## 6. Standalone Binary Compilation
 
-- Download a pix2pix dataset (e.g.[facades](http://cmp.felk.cvut.cz/~tylecr1/facade/)):
+If you want to package the GUI into a single standalone program (executable binary) that runs without requiring python or pytorch installed on the target machine:
 
-```bash
-bash ./datasets/download_pix2pix_dataset.sh facades
-```
+1.  Run the packaging script:
+    ```bash
+    python build_gui.py
+    ```
+2.  The script automatically detects the virtual environment's `customtkinter` assets (JSON templates, fonts) and invokes PyInstaller.
+3.  The outputs are written to the `dist/` folder:
+    *   **Linux:** `dist/Vision-X_Dashboard` (ELF binary)
+    *   **Windows:** `dist/Vision-X_Dashboard.exe` (PE executable, must be built on Windows)
 
-- To log training progress and test images to W&B dashboard, set the `--use_wandb` flag with training script
-- Train a model:
+---
 
-```bash
-#!./scripts/train_pix2pix.sh
-python train.py --dataroot ./datasets/facades --name facades_pix2pix --model pix2pix --direction BtoA  --use_wandb
-```
+## 7. Automated Scripts Directory
 
-To see more intermediate results, check out `./checkpoints/facades_pix2pix/web/index.html`.
-
-- Test the model (`bash ./scripts/test_pix2pix.sh`):
-
-```bash
-#!./scripts/test_pix2pix.sh
-python test.py --dataroot ./datasets/facades --name facades_pix2pix --model pix2pix --direction BtoA
-```
-
-- The test results will be saved to a html file here: `./results/facades_pix2pix/test_latest/index.html`. You can find more scripts at `scripts` directory.
-- To train and test pix2pix-based colorization models, please add `--model colorization` and `--dataset_mode colorization`. See our training [tips](https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/docs/tips.md#notes-on-colorization) for more details.
-
-### Apply a pre-trained model (CycleGAN)
-
-- You can download a pretrained model (e.g. horse2zebra) with the following script:
-
-```bash
-bash ./scripts/download_cyclegan_model.sh horse2zebra
-```
-
-- The pretrained model is saved at `./checkpoints/{name}_pretrained/latest_net_G.pth`. Check [here](https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/scripts/download_cyclegan_model.sh#L3) for all the available CycleGAN models.
-- To test the model, you also need to download the horse2zebra dataset:
-
-```bash
-bash ./datasets/download_cyclegan_dataset.sh horse2zebra
-```
-
-- Then generate the results using
-
-```bash
-python test.py --dataroot datasets/horse2zebra/testA --name horse2zebra_pretrained --model test --no_dropout
-```
-
-- The option `--model test` is used for generating results of CycleGAN only for one side. This option will automatically set `--dataset_mode single`, which only loads the images from one set. On the contrary, using `--model cycle_gan` requires loading and generating results in both directions, which is sometimes unnecessary. The results will be saved at `./results/`. Use `--results_dir {directory_path_to_save_result}` to specify the results directory.
-
-- For pix2pix and your own models, you need to explicitly specify `--netG`, `--norm`, `--no_dropout` to match the generator architecture of the trained model. See this [FAQ](https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/docs/qa.md#runtimeerror-errors-in-loading-state_dict-812-671461-296) for more details.
-
-### Apply a pre-trained model (pix2pix)
-
-Download a pre-trained model with `./scripts/download_pix2pix_model.sh`.
-
-- Check [here](https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/scripts/download_pix2pix_model.sh#L3) for all the available pix2pix models. For example, if you would like to download label2photo model on the Facades dataset,
-
-```bash
-bash ./scripts/download_pix2pix_model.sh facades_label2photo
-```
-
-- Download the pix2pix facades datasets:
-
-```bash
-bash ./datasets/download_pix2pix_dataset.sh facades
-```
-
-- Then generate the results using
-
-```bash
-python test.py --dataroot ./datasets/facades/ --direction BtoA --model pix2pix --name facades_label2photo_pretrained
-```
-
-- Note that we specified `--direction BtoA` as Facades dataset's A to B direction is photos to labels.
-
-- If you would like to apply a pre-trained model to a collection of input images (rather than image pairs), please use `--model test` option. See `./scripts/test_single.sh` for how to apply a model to Facade label maps (stored in the directory `facades/testB`).
-
-- See a list of currently available models at `./scripts/download_pix2pix_model.sh`
-
-### Multi-GPU training
-
-To train a model on multiple GPUs, please use `torchrun --nproc_per_node=4 train.py ...` instead of `python train.py ...`. We also need to use synchronized batchnorm by setting `--norm sync_batch` (or `--norm sync_instance` for instance normgalization). The `--norm batch` is not compatible with DDP.
-
-## [Docker](docs/docker.md)
-
-We provide the pre-built Docker image and Dockerfile that can run this code repo. See [docker](docs/docker.md).
-
-## [Datasets](docs/datasets.md)
-
-Download pix2pix/CycleGAN datasets and create your own datasets.
-
-## [Training/Test Tips](docs/tips.md)
-
-Best practice for training and testing your models.
-
-## [Frequently Asked Questions](docs/qa.md)
-
-Before you post a new question, please first look at the above Q & A and existing GitHub issues.
-
-## Custom Model and Dataset
-
-If you plan to implement custom models and dataset for your new applications, we provide a dataset [template](data/template_dataset.py) and a model [template](models/template_model.py) as a starting point.
-
-## [Code structure](docs/overview.md)
-
-To help users better understand and use our code, we briefly overview the functionality and implementation of each package and each module.
-
-## Pull Request
-
-You are always welcome to contribute to this repository by sending a [pull request](https://help.github.com/articles/about-pull-requests/).
-Please run `flake8 --ignore E501 .` and `pytest scripts/test_before_push.py -v` before you commit the code. Please also update the code structure [overview](docs/overview.md) accordingly if you add or remove files.
-
-## Citation
-
-If you use this code for your research, please cite our papers.
-
-```
-@inproceedings{CycleGAN2017,
-  title={Unpaired Image-to-Image Translation using Cycle-Consistent Adversarial Networks},
-  author={Zhu, Jun-Yan and Park, Taesung and Isola, Phillip and Efros, Alexei A},
-  booktitle={Computer Vision (ICCV), 2017 IEEE International Conference on},
-  year={2017}
-}
-
-
-@inproceedings{isola2017image,
-  title={Image-to-Image Translation with Conditional Adversarial Networks},
-  author={Isola, Phillip and Zhu, Jun-Yan and Zhou, Tinghui and Efros, Alexei A},
-  booktitle={Computer Vision and Pattern Recognition (CVPR), 2017 IEEE Conference on},
-  year={2017}
-}
-```
-
-## Other Languages
-
-[Spanish](docs/README_es.md)
-
-## Related Projects
-
-[img2img-turbo](https://github.com/GaParmar/img2img-turbo)<br>
-[contrastive-unpaired-translation](https://github.com/taesungp/contrastive-unpaired-translation) (CUT)<br>
-[CycleGAN-Torch](https://github.com/junyanz/CycleGAN) |
-[pix2pix-Torch](https://github.com/phillipi/pix2pix) | [pix2pixHD](https://github.com/NVIDIA/pix2pixHD)|
-[BicycleGAN](https://github.com/junyanz/BicycleGAN) | [vid2vid](https://tcwang0509.github.io/vid2vid/) | [SPADE/GauGAN](https://github.com/NVlabs/SPADE)<br>
-[iGAN](https://github.com/junyanz/iGAN) | [GAN Dissection](https://github.com/CSAILVision/GANDissect) | [GAN Paint](http://ganpaint.io/)
-
-## Cat Paper Collection
-
-If you love cats, and love reading cool graphics, vision, and learning papers, please check out the Cat Paper [Collection](https://github.com/junyanz/CatPapers).
-
-## Acknowledgments
-
-Our code is inspired by [pytorch-DCGAN](https://github.com/pytorch/examples/tree/master/dcgan).
+The [scripts/](file:///home/sankhya/Coding/Python/GAN-ml-/scripts) folder contains automated utility pipelines:
+*   `install_deps.sh`: Fast dependency installation wrapper.
+*   `conda_deps.sh`: Conda environment creation script.
+*   `train_pix2pix.sh`: Quick template script to start local pix2pix model training.
+*   `test_pix2pix.sh`: Template to validate model outputs.
+*   `train_satellite.sh`: Custom training script designed for multi-spectral remote-sensing datasets.
+*   `test_before_push.py`: Code quality assurance script running flake8 linting and validation tests.
